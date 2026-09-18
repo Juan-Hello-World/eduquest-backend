@@ -22,4 +22,6 @@ public class StudySessionRequestDTO {
 
     @NotNull
     private Long groupId;
+
+
 }

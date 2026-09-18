@@ -20,6 +20,8 @@ public class StudyPlan {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    private String title;
+
     @NotBlank
     @Size(max = 100)
     @Column(nullable = false)
@@ -29,8 +31,8 @@ public class StudyPlan {
     @Column(nullable = false)
     private String difficulty; // Baja, Media, Alta
 
-    @Column(columnDefinition = "TEXT", nullable = false)
-    private String generatedContent; // Estructura del plan devuelta por OpenAI
+    @Column(name = "generated_content", nullable = false, columnDefinition = "TEXT")
+    private String generatedContent;
 
     @Column(nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
