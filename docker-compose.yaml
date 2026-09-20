@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: eduquest-postgres
+    environment:
+      POSTGRES_DB: eduquest
+      POSTGRES_USER: eduquest_user
+      POSTGRES_PASSWORD: eduquest_pass
+    ports:
+      - "5433:5432"
+    volumes:
+      - eduquest_pgdata:/var/lib/postgresql/data
+
+volumes:
+  eduquest_pgdata:
