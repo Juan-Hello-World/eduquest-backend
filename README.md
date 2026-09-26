@@ -202,16 +202,6 @@ Ejecutar con: `./mvnw verify`
 
 `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `JWT_SECRET`, `JWT_EXPIRATION_ACCESS`, `JWT_EXPIRATION_REFRESH`, `MAIL_USER`, `MAIL_APP_PASSWORD`, `OPENAI_API_KEY`. Todas se cargan en `application.properties` mediante `spring.config.import=optional:file:./.env[.properties]` y, en producción, son provistas por la plataforma de despliegue.
 
-### Despliegue en la nube (pasos para completarlo)
-
-El proyecto incluye `Dockerfile` (imagen multi-etapa con Java 21), `render.yaml` (blueprint Render con web service + PostgreSQL), `application-prod.properties` y CI con GitHub Actions. Para publicar:
-
-1. Subir el repositorio a GitHub (push a `main` activa el CI automáticamente).
-2. En **Render**: *New → Blueprint* y seleccionar el repositorio; Render detectará `render.yaml` y creará el servicio web y la base de datos.
-3. Completar las variables de entorno en Render: `JWT_SECRET` (se genera sola), `OPENAI_API_KEY`, `MAIL_USER`, `MAIL_APP_PASSWORD` y `SPRING_PROFILES_ACTIVE=prod` (las de la BD se inyectan automáticamente desde el servicio PostgreSQL).
-4. La URL del servicio queda disponible en el dashboard y se puede probar con la colección de Postman cambiando la variable `baseUrl`.
-
-Las evidencias del despliegue se muestran en la sección [Evidencias del Deploy](#evidencias-del-deploy).
 
 ## Endpoints Documentados
 
