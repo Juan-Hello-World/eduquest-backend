@@ -1,0 +1,44 @@
+services:
+  - type: web
+    name: eduquest-backend
+    runtime: docker
+    plan: free
+    envVars:
+      - key: DB_HOST
+        fromDatabase:
+          name: eduquest-postgres
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: eduquest-postgres
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: eduquest-postgres
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: eduquest-postgres
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: eduquest-postgres
+          property: password
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRATION_ACCESS
+        value: 3600000
+      - key: JWT_EXPIRATION_REFRESH
+        value: 604800000
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: MAIL_USER
+        sync: false
+      - key: MAIL_APP_PASSWORD
+        sync: false
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+
+databases:
+  - name: eduquest-postgres
+    plan: free

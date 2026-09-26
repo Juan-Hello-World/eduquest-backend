@@ -1,0 +1,620 @@
+{
+    "info":  {
+                 "_postman_id":  "e0a0e6f7-6d2a-4f5b-9b4e-8c1d3f2a7b90",
+                 "name":  "EduQuest API",
+                 "description":  "Colección de endpoints del backend de EduQuest (CS 2031 - DBP). Incluye autenticación JWT con access/refresh tokens, administración de usuarios, biblioteca de documentos, grupos privados, sesiones de asesoría, plan de estudio con IA y reseñas.\n\nConfiguración:\n- Variable `baseUrl`: http://localhost:8080/api/v1 (cambiar al dominio de producción).\n- Tras iniciar sesión o registrarse, el test guarda automáticamente `token` y `refreshToken` en las variables de la colección; los endpoints protegidos usan el token en el header Authorization.",
+                 "schema":  "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+             },
+    "auth":  {
+                 "type":  "bearer",
+                 "bearer":  [
+                                {
+                                    "key":  "token",
+                                    "value":  "{{token}}",
+                                    "type":  "string"
+                                }
+                            ]
+             },
+    "variable":  [
+                     {
+                         "key":  "baseUrl",
+                         "value":  "http://localhost:8080/api/v1"
+                     },
+                     {
+                         "key":  "token",
+                         "value":  ""
+                     },
+                     {
+                         "key":  "refreshToken",
+                         "value":  ""
+                     },
+                     {
+                         "key":  "userId",
+                         "value":  "2"
+                     },
+                     {
+                         "key":  "documentId",
+                         "value":  "1"
+                     },
+                     {
+                         "key":  "reviewId",
+                         "value":  "1"
+                     },
+                     {
+                         "key":  "groupId",
+                         "value":  "1"
+                     }
+                 ],
+    "item":  [
+                 {
+                     "name":  "Auth",
+                     "item":  [
+                                  {
+                                      "name":  "Registrar usuario (público)",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"username\": \"estudiante1\",\n  \"email\": \"estudiante1@utec.edu.pe\",\n  \"password\": \"Password123\"\n}"
+                                                               },
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/auth/register",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "auth",
+                                                                               "register"
+                                                                           ]
+                                                              },
+                                                      "description":  "Crea una cuenta nueva con rol ROLE_USER. No requiere token. La contraseña debe tener mínimo 8 caracteres con al menos una letra y un número. El test guarda `token` y `refreshToken` en las variables de la colección."
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "exec":  [
+                                                                                    "const jsonData = pm.response.json();",
+                                                                                    "pm.collectionVariables.set(\u0027token\u0027, jsonData.token);",
+                                                                                    "pm.collectionVariables.set(\u0027refreshToken\u0027, jsonData.refreshToken);"
+                                                                                ],
+                                                                       "type":  "text/javascript"
+                                                                   }
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "name":  "Iniciar sesión (público)",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"username\": \"estudiante1\",\n  \"password\": \"Password123\"\n}"
+                                                               },
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/auth/login",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "auth",
+                                                                               "login"
+                                                                           ]
+                                                              },
+                                                      "description":  "Autentica al usuario y devuelve un access token y un refresh token. El test guarda ambos en las variables de la colección."
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "exec":  [
+                                                                                    "const jsonData = pm.response.json();",
+                                                                                    "pm.collectionVariables.set(\u0027token\u0027, jsonData.token);",
+                                                                                    "pm.collectionVariables.set(\u0027refreshToken\u0027, jsonData.refreshToken);"
+                                                                                ],
+                                                                       "type":  "text/javascript"
+                                                                   }
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "name":  "Renovar access token",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+                                                               },
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/auth/refresh",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "auth",
+                                                                               "refresh"
+                                                                           ]
+                                                              },
+                                                      "description":  "Intercambia un refresh token por un par de tokens nuevo. El refresh token no puede usarse directamente en endpoints protegidos."
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "exec":  [
+                                                                                    "const jsonData = pm.response.json();",
+                                                                                    "pm.collectionVariables.set(\u0027token\u0027, jsonData.token);",
+                                                                                    "pm.collectionVariables.set(\u0027refreshToken\u0027, jsonData.refreshToken);"
+                                                                                ],
+                                                                       "type":  "text/javascript"
+                                                                   }
+                                                    }
+                                                ]
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Usuarios",
+                     "item":  [
+                                  {
+                                      "name":  "Mi perfil",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "body":  null,
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/users/me",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "users",
+                                                                               "me"
+                                                                           ]
+                                                              },
+                                                      "description":  "Devuelve id, username, email y roles del usuario autenticado, leídos desde los claims del token JWT."
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Listar usuarios (ADMIN/MANAGER)",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "body":  null,
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/admin/users?page=0\u0026size=10",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "admin",
+                                                                               "users"
+                                                                           ],
+                                                                  "query":  [
+                                                                                {
+                                                                                    "key":  "page",
+                                                                                    "value":  "0"
+                                                                                },
+                                                                                {
+                                                                                    "key":  "size",
+                                                                                    "value":  "10"
+                                                                                }
+                                                                            ]
+                                                              },
+                                                      "description":  "Lista los usuarios paginados (`page` y `size`). Responde `{ content, page, size, totalElements, totalPages }`. Requiere rol ROLE_ADMIN o ROLE_MANAGER."
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Obtener usuario por id (ADMIN/MANAGER)",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "body":  null,
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/admin/users/{{userId}}",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "admin",
+                                                                               "users",
+                                                                               "{{userId}}"
+                                                                           ]
+                                                              },
+                                                      "description":  "Devuelve un usuario por su id. Requiere rol ROLE_ADMIN o ROLE_MANAGER."
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Cambiar rol de usuario (solo ADMIN)",
+                                      "request":  {
+                                                      "method":  "PATCH",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "body":  null,
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/admin/users/{{userId}}/role?role=ROLE_MANAGER",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "admin",
+                                                                               "users",
+                                                                               "{{userId}}",
+                                                                               "role"
+                                                                           ],
+                                                                  "query":  [
+                                                                                {
+                                                                                    "key":  "role",
+                                                                                    "value":  "ROLE_MANAGER"
+                                                                                }
+                                                                            ]
+                                                              },
+                                                      "description":  "Cambia el rol de un usuario (rol: ROLE_USER, ROLE_ADMIN, ROLE_MANAGER). Requiere rol ROLE_ADMIN."
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Documentos",
+                     "item":  [
+                                  {
+                                      "name":  "Listar documentos",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "body":  null,
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/documents?page=0\u0026size=10",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "documents"
+                                                                           ],
+                                                                  "query":  [
+                                                                                {
+                                                                                    "key":  "page",
+                                                                                    "value":  "0"
+                                                                                },
+                                                                                {
+                                                                                    "key":  "size",
+                                                                                    "value":  "10"
+                                                                                }
+                                                                            ]
+                                                              },
+                                                      "description":  "Devuelve los materiales de la biblioteca abierta paginados (`page`, `size`). Responde `{ content, page, size, totalElements, totalPages }`."
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Crear documento",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"title\": \"Apuntes de Calculo\",\n  \"description\": \"Semana 3\",\n  \"fileUrl\": \"https://cloud.example/calculo.pdf\"\n}"
+                                                               },
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/documents",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "documents"
+                                                                           ]
+                                                              },
+                                                      "description":  "Sube un documento al repositorio general (documento global). El autor se toma del usuario autenticado y se dispara el evento asíncrono que confirma la publicación por correo."
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Grupos y sesiones",
+                     "item":  [
+                                  {
+                                      "name":  "Crear grupo",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"name\": \"Grupo de Calculo\",\n  \"description\": \"Estudio de Calculo I\"\n}"
+                                                               },
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/groups",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "groups"
+                                                                           ]
+                                                              },
+                                                      "description":  "Crea un grupo privado de estudio; el creador se une automáticamente como miembro."
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Listar grupos",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "body":  null,
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/groups?page=0\u0026size=10",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "groups"
+                                                                           ],
+                                                                  "query":  [
+                                                                                {
+                                                                                    "key":  "page",
+                                                                                    "value":  "0"
+                                                                                },
+                                                                                {
+                                                                                    "key":  "size",
+                                                                                    "value":  "10"
+                                                                                }
+                                                                            ]
+                                                              },
+                                                      "description":  "Devuelve los grupos paginados (`page`, `size`). Responde `{ content, page, size, totalElements, totalPages }`."
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Crear sesión de asesoría",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"title\": \"Sesion 1\",\n  \"description\": \"Repaso de parcial\",\n  \"scheduledAt\": \"2026-10-01T10:00:00\",\n  \"meetingUrl\": \"https://meet.example.com/abc\"\n}"
+                                                               },
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/groups/{{groupId}}/sessions",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "groups",
+                                                                               "{{groupId}}",
+                                                                               "sessions"
+                                                                           ]
+                                                              },
+                                                      "description":  "Reserva una sesión de asesoría dentro de un grupo. La fecha debe ser futura."
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Sesiones de un grupo",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "body":  null,
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/groups/{{groupId}}/sessions",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "groups",
+                                                                               "{{groupId}}",
+                                                                               "sessions"
+                                                                           ]
+                                                              },
+                                                      "description":  "Lista todas las sesiones programadas en el grupo indicado."
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Subir documento al grupo",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"title\": \"Apunte del grupo\",\n  \"description\": \"Material compartido\",\n  \"fileUrl\": \"https://cloud.example/apunte.pdf\"\n}"
+                                                               },
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/groups/{{groupId}}/documents",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "groups",
+                                                                               "{{groupId}}",
+                                                                               "documents"
+                                                                           ]
+                                                              },
+                                                      "description":  "Sube un documento al grupo. El usuario autenticado debe ser miembro del grupo (403 si no lo es); si lo es, la respuesta incluye el `groupName`."
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Plan de estudio (IA)",
+                     "item":  [
+                                  {
+                                      "name":  "Generar plan de estudio",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"courseName\": \"Matematica Discreta\",\n  \"difficulty\": \"Alta\"\n}"
+                                                               },
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/study-plans/generate",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "study-plans",
+                                                                               "generate"
+                                                                           ]
+                                                              },
+                                                      "description":  "Envía el curso y su dificultad percibida (Baja/Media/Alta) a OpenAI y devuelve un plan de estudio generado por IA. Requiere OPENAI_API_KEY válida."
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Reseñas",
+                     "item":  [
+                                  {
+                                      "name":  "Reseñas de un documento",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "body":  null,
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/documents/{{documentId}}/reviews?page=0\u0026size=10",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "documents",
+                                                                               "{{documentId}}",
+                                                                               "reviews"
+                                                                           ],
+                                                                  "query":  [
+                                                                                {
+                                                                                    "key":  "page",
+                                                                                    "value":  "0"
+                                                                                },
+                                                                                {
+                                                                                    "key":  "size",
+                                                                                    "value":  "10"
+                                                                                }
+                                                                            ]
+                                                              },
+                                                      "description":  "Devuelve las reseñas de un documento paginadas (`page`, `size`). Responde `{ content, page, size, totalElements, totalPages }`."
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Crear reseña",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"rating\": 5,\n  \"comment\": \"Excelente material\",\n  \"documentId\": 1\n}"
+                                                               },
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/reviews",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "reviews"
+                                                                           ]
+                                                              },
+                                                      "description":  "Califica (1–5) y comenta un documento. Solo se permite una reseña por usuario y documento (409 en caso de duplicado)."
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Obtener reseña",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "body":  null,
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/reviews/{{reviewId}}",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "reviews",
+                                                                               "{{reviewId}}"
+                                                                           ]
+                                                              },
+                                                      "description":  "Devuelve los detalles de una reseña por su id."
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Eliminar reseña",
+                                      "request":  {
+                                                      "method":  "DELETE",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "body":  null,
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/reviews/{{reviewId}}",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "reviews",
+                                                                               "{{reviewId}}"
+                                                                           ]
+                                                              },
+                                                      "description":  "Elimina una reseña. El autor puede eliminar la suya; un ADMIN o MANAGER puede eliminar cualquier reseña."
+                                                  }
+                                  }
+                              ]
+                 }
+             ]
+}
