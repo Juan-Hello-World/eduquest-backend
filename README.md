@@ -12,7 +12,7 @@
 | Omar Alonzo Guzmán Harvey | 202510519 |
 | Edson Yenen Falcon Jimenez | 202510492 |
 
-**Deployment:** pendiente — todos los artefactos listos (Dockerfile, `render.yaml`, perfil `prod`) e instrucciones debajo.
+**Deployment:** desplegado — evidencias en la sección [Evidencias del Deploy](#evidencias-del-deploy).
 
 ---
 
@@ -30,9 +30,10 @@
 10. [Pruebas y Cobertura](#pruebas-y-cobertura)
 11. [Variables de Entorno](#variables-de-entorno)
 12. [Endpoints Documentados](#endpoints-documentados)
-13. [GitHub & Management](#github--management)
-14. [Conclusión](#conclusión)
-15. [Apéndices](#apéndices)
+13. [Evidencias del Deploy](#evidencias-del-deploy)
+14. [GitHub & Management](#github--management)
+15. [Conclusión](#conclusión)
+16. [Apéndices](#apéndices)
 
 ---
 
@@ -159,7 +160,7 @@ Las excepciones personalizadas (`ResourceNotFoundException`, `DuplicateResourceE
 - **Access y refresh tokens:** los tokens de refresh se usan solo en `/auth/refresh`; el filtro rechaza usarlos en endpoints protegidos.
 - **Contraseñas** cifradas con `BCryptPasswordEncoder`.
 - **Autorización por roles:** `@PreAuthorize` en métodos sensibles. Creamos un admin inicial (`admin@utec.edu.pe`/`admin123`) mediante un inicializador idempotente.
-- El filtro `JwtAuthorizationFilter` (estilo del curso) valida el header `Authorization: Bearer <token>` y carga el `UserPrincipal` en el `SecurityContext`.
+- El filtro `JwtAuthorizationFilter` valida el header `Authorization: Bearer <token>` y carga el `UserPrincipal` en el `SecurityContext`.
 
 ### Prevención de Vulnerabilidades
 
@@ -210,7 +211,7 @@ El proyecto incluye `Dockerfile` (imagen multi-etapa con Java 21), `render.yaml`
 3. Completar las variables de entorno en Render: `JWT_SECRET` (se genera sola), `OPENAI_API_KEY`, `MAIL_USER`, `MAIL_APP_PASSWORD` y `SPRING_PROFILES_ACTIVE=prod` (las de la BD se inyectan automáticamente desde el servicio PostgreSQL).
 4. La URL del servicio queda disponible en el dashboard y se puede probar con la colección de Postman cambiando la variable `baseUrl`.
 
-El despliegue quedó documentado como pendiente de completar por el equipo.
+Las evidencias del despliegue se muestran en la sección [Evidencias del Deploy](#evidencias-del-deploy).
 
 ## Endpoints Documentados
 
@@ -238,9 +239,52 @@ La API incluye **Swagger UI / OpenAPI 3.1** (springdoc-openapi v3), disponible e
 
 Para probar los endpoints protegidos, primero genera un token en `POST /api/v1/auth/login` y usa el botón **Authorize** de Swagger pegando el `accessToken` (se envía como `Authorization: Bearer <token>`). El esquema de seguridad se define en `config/OpenAPIConfig.java` y los controladores están documentados con `@Tag`/`@Operation`.
 
+## Evidencias del Deploy
+
+> En esta sección se registran las evidencias del despliegue del backend en la nube. 
+
+### Imágenes del RDC
+
+Evidencias del despliegue tomadas del dashboard/registro del servicio de despliegue:
+![img.png](img.png)
+
+![img_1.png](img_1.png)
+
+![img_2.png](img_2.png)
+
+### Evidencias del Deploy en EC2 (AWS)
+
+Muestra la instancia creada, la conexión SSH y la aplicación ejecutándose en un puerto de la instancia:
+
+![img_3.png](img_3.png)
+
+![img_4.png](img_4.png)
+
+
+### Evidencias del Postman con el backend desplegado
+
+Ejecución de la colección (`postman_collection.json`) contra la URL pública del backend desplegado:
+
+![img_11.png](img_11.png)
+
+
+![img_5.png](img_5.png)
+
+![img_8.png](img_8.png)
+
+
+![img_6.png](img_6.png)
+
+![img_9.png](img_9.png)
+
+
+![img_7.png](img_7.png)
+
+![img_10.png](img_10.png)
+
 ## GitHub & Management
 
-El código vive en un repositorio central en GitHub con `main` como rama de integración y **GitHub Actions** como CI: el flujo compila, ejecuta los tests y valida la cobertura mínima del 80% con JaCoCo (`./mvnw verify`) en cada push. Los avances se registran en commits organizados por misión (seguridad, eventos, deployment) y, para la siguiente fase, la gestión del backlog se hará con GitHub Issues, etiquetas e hitos sobre los pendientes (despliegue y bonus).
+El código vive en un repositorio central en GitHub con `main` como rama de integración y **GitHub Actions** como CI: el flujo compila, ejecuta los tests y valida la cobertura mínima del 80% con JaCoCo (`./mvnw verify`) en cada push. Los avances se registran en commits organizados por misión (seguridad, eventos, deployment) y, para la siguiente fase, la gestión del backlog se hará con GitHub Issues.
 
 ## Conclusión
 
@@ -259,16 +303,3 @@ El equipo consolidó patrones aprendidos en el curso: arquitectura Controller→
 - Upload de archivos directo a S3/Cloudinary, incluyendo videos.
 - Integración con Google Meet/Zoom para generar enlaces de asesoría automáticamente.
 
-## Apéndices
-
-### Licencia
-
-Proyecto académico de uso educativo; no se distribuye bajo licencia comercial.
-
-### Referencias
-
-- Spring Security y JWT (sesiones Semana 6).
-- Spring Boot, JPA y eventos asíncronos (sesiones Semanas 2, 3 y 5).
-- RFC 7807/RFC 9457 — HTTP Problem Details.
-- OpenAPI Chat Completions (modelo `gpt-4o-mini`).
-- Postman Learning Center (certificación de Postman).
