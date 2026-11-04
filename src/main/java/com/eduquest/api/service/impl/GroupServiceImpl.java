@@ -5,6 +5,7 @@ import com.eduquest.api.dto.response.GroupResponseDTO;
 import com.eduquest.api.dto.response.PageResponseDTO;
 import com.eduquest.api.entity.PrivateGroup;
 import com.eduquest.api.entity.User;
+import com.eduquest.api.exception.DuplicateResourceException;
 import com.eduquest.api.exception.ResourceNotFoundException;
 import com.eduquest.api.repository.PrivateGroupRepository;
 import com.eduquest.api.repository.UserRepository;
@@ -37,8 +38,8 @@ public class GroupServiceImpl implements GroupService {
         PrivateGroup group = new PrivateGroup();
         group.setName(request.getName());
         group.setDescription(request.getDescription());
+        group.setCreator(user);
 
-        // Asociamos al usuario a la tabla intermedia de miembros del grupo
         group.getMembers().add(user);
 
         PrivateGroup savedGroup = groupRepository.save(group);
@@ -61,11 +62,40 @@ public class GroupServiceImpl implements GroupService {
             dto.setId(group.getId());
             dto.setName(group.getName());
             dto.setDescription(group.getDescription());
-            // Tomamos el primer miembro como referencia del creador principal
-            String creator = group.getMembers().isEmpty() ? "Sin miembros" : group.getMembers().iterator().next().getUsername();
+            String creator = group.getCreator() != null
+                    ? group.getCreator().getUsername()
+                    : (group.getMembers().isEmpty() ? "Sin miembros" : group.getMembers().iterator().next().getUsername());
             dto.setCreatorUsername(creator);
             return dto;
         }).collect(Collectors.toList());
         return PageResponseDTO.of(content, groupPage.getNumber(), groupPage.getSize(), groupPage.getTotalElements());
+    }
+
+    @Override
+    @Transactional
+    public GroupResponseDTO joinGroup(Long groupId, String username) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado"));
+
+        PrivateGroup group = groupRepository.findById(groupId)
+                .orElseThrow(() -> new ResourceNotFoundException("Grupo no encontrado"));
+
+        if (groupRepository.existsByIdAndMembersId(groupId, user.getId())) {
+            throw new DuplicateResourceException("Ya eres miembro de este grupo");
+        }
+
+        group.getMembers().add(user);
+        PrivateGroup savedGroup = groupRepository.save(group);
+
+        GroupResponseDTO response = new GroupResponseDTO();
+        response.setId(savedGroup.getId());
+        response.setName(savedGroup.getName());
+        response.setDescription(savedGroup.getDescription());
+        String creator = savedGroup.getCreator() != null
+                ? savedGroup.getCreator().getUsername()
+                : (savedGroup.getMembers().isEmpty() ? "Sin miembros" : savedGroup.getMembers().iterator().next().getUsername());
+        response.setCreatorUsername(creator);
+
+        return response;
     }
 }

@@ -11,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/study-plans")
@@ -35,5 +36,13 @@ public class StudyPlanController {
 
         StudyPlanResponseDTO response = studyPlanService.generateStudyPlan(request, username);
         return new ResponseEntity<>(response, HttpStatus.CREATED);
+    }
+
+    @GetMapping
+    @PreAuthorize("hasAuthority('ROLE_USER') or hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_MANAGER')")
+    @Operation(summary = "Listar mis planes de estudio", description = "Devuelve el historial de planes generados por el usuario autenticado.")
+    public ResponseEntity<List<StudyPlanResponseDTO>> getMyPlans(Authentication authentication) {
+        String username = authentication.getName();
+        return ResponseEntity.ok(studyPlanService.getMyStudyPlans(username));
     }
 }

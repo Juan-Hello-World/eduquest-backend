@@ -97,4 +97,29 @@ class GroupControllerTest {
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(result.getBody().getGroupName()).isEqualTo("Grupo de Calculo");
     }
+    @Test
+    void joinGroup_returnsOk() {
+        Authentication authentication = mock(Authentication.class);
+        when(authentication.getName()).thenReturn("alice");
+        when(groupService.joinGroup(anyLong(), anyString())).thenReturn(response());
+
+        ResponseEntity<GroupResponseDTO> result = groupController.joinGroup(1L, authentication);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(result.getBody().getName()).isEqualTo("Grupo de Calculo");
+    }
+
+    @Test
+    void getGroupDocuments_returnsPaginatedResponse() {
+        Authentication authentication = mock(Authentication.class);
+        when(authentication.getName()).thenReturn("alice");
+        PageResponseDTO<DocumentResponseDTO> page =
+                new PageResponseDTO<DocumentResponseDTO>(List.of(), 0, 10, 0, 0);
+        when(documentService.getDocumentsByGroup(anyLong(), anyString(), any())).thenReturn(page);
+
+        ResponseEntity<PageResponseDTO<DocumentResponseDTO>> result =
+                groupController.getGroupDocuments(1L, 0, 10, authentication);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
 }

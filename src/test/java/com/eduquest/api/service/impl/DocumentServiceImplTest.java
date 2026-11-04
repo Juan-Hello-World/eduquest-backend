@@ -41,6 +41,8 @@ class DocumentServiceImplTest {
     @Mock UserRepository userRepository;
     @Mock PrivateGroupRepository groupRepository;
     @Mock ApplicationEventPublisher eventPublisher;
+    @Mock com.eduquest.api.repository.TagRepository tagRepository;
+
 
     @InjectMocks DocumentServiceImpl documentService;
 
@@ -101,6 +103,22 @@ class DocumentServiceImplTest {
         assertThatThrownBy(() -> documentService.createDocument(request, "ghost"))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
+    @Test
+    void createDocument_withTags_resolvesAndSavesTags() {
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(tagRepository.findByName("Matematicas")).thenReturn(Optional.empty());
+        when(tagRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(documentRepository.save(any(Document.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        DocumentRequestDTO request = new DocumentRequestDTO();
+        request.setTitle("Calculo");
+        request.setFileUrl("https://cloud.example/calc.pdf");
+        request.setTags(java.util.Set.of("Matematicas"));
+
+        DocumentResponseDTO response = documentService.createDocument(request, "alice");
+
+        assertThat(response.getTags()).containsExactly("Matematicas");
+    }
 
     @Test
     void getAllDocuments_returnsPaginatedContent() {
@@ -115,6 +133,7 @@ class DocumentServiceImplTest {
         assertThat(page.page()).isZero();
         assertThat(page.totalPages()).isEqualTo(1);
     }
+
 
     @Test
     void uploadDocumentToGroup_asMember_createsDocumentInGroup() {
@@ -177,5 +196,43 @@ class DocumentServiceImplTest {
 
         assertThatThrownBy(() -> documentService.uploadDocumentToGroup(1L, request, "ghost"))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void getAllDocuments_withSearchAndTag_callsSearchPublicDocuments() {
+        Pageable pageable = PageRequest.of(0, 10);
+        when(documentRepository.searchPublicDocuments("Calculo", "Matematicas", pageable))
+                .thenReturn(new PageImpl<>(List.of(document), pageable, 1));
+
+        PageResponseDTO<DocumentResponseDTO> page =
+                documentService.getAllDocuments("Calculo", "Matematicas", pageable);
+
+        assertThat(page.content()).hasSize(1);
+    }
+
+    @Test
+    void getDocumentsByGroup_asMember_returnsPaginatedDocuments() {
+        Pageable pageable = PageRequest.of(0, 10);
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(groupRepository.existsById(1L)).thenReturn(true);
+        when(groupRepository.existsByIdAndMembersId(1L, 1L)).thenReturn(true);
+        when(documentRepository.findByGroupId(1L, pageable))
+                .thenReturn(new PageImpl<Document>(List.of(document), pageable, 1));
+
+        PageResponseDTO<DocumentResponseDTO> page =
+                documentService.getDocumentsByGroup(1L, "alice", pageable);
+
+        assertThat(page.content()).hasSize(1);
+    }
+
+    @Test
+    void getDocumentsByGroup_asNonMember_throwsForbidden() {
+        Pageable pageable = PageRequest.of(0, 10);
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(groupRepository.existsById(1L)).thenReturn(true);
+        when(groupRepository.existsByIdAndMembersId(1L, 1L)).thenReturn(false);
+
+        assertThatThrownBy(() -> documentService.getDocumentsByGroup(1L, "alice", pageable))
+                .isInstanceOf(ForbiddenException.class);
     }
 }

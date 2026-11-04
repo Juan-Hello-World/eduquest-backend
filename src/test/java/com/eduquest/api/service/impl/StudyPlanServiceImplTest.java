@@ -95,4 +95,20 @@ class StudyPlanServiceImplTest {
         assertThatThrownBy(() -> studyPlanService.generateStudyPlan(request, "ghost"))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
+    @Test
+    void getMyStudyPlans_returnsUserPlans() {
+        StudyPlan plan = new StudyPlan();
+        plan.setId(1L);
+        plan.setCourseName("Algoritmos");
+        plan.setDifficulty("Alta");
+        plan.setGeneratedContent("Contenido");
+
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(studyPlanRepository.findByUserId(1L)).thenReturn( java.util.List.of(plan));
+
+        java.util.List<StudyPlanResponseDTO> plans = studyPlanService.getMyStudyPlans("alice");
+
+        assertThat(plans).hasSize(1);
+        assertThat(plans.get(0).getCourseName()).isEqualTo("Algoritmos");
+    }
 }

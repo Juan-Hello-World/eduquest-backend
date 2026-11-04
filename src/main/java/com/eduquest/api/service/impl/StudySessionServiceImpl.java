@@ -44,16 +44,15 @@ public class StudySessionServiceImpl implements StudySessionService {
         return mapToResponse(savedSession);
     }
 
+
     @Override
     @Transactional(readOnly = true)
     public List<StudySessionResponseDTO> getSessionsByGroup(Long groupId) {
         if (!groupRepository.existsById(groupId)) {
             throw new ResourceNotFoundException("Grupo privado no encontrado");
         }
-
         // Asegúrate de que tu StudySessionRepository tenga un método para buscar por el ID del grupo privado
-        return sessionRepository.findAll().stream()
-                .filter(s -> s.getPrivateGroup() != null && s.getPrivateGroup().getId().equals(groupId))
+        return sessionRepository.findByPrivateGroupId(groupId).stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }

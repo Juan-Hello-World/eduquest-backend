@@ -8,4 +8,5 @@ import org.springframework.data.domain.Pageable;
 public interface GroupService {
     GroupResponseDTO createGroup(GroupRequestDTO request, String username);
     PageResponseDTO<GroupResponseDTO> getAllGroups(Pageable pageable);
+    GroupResponseDTO joinGroup(Long groupId, String username);
 }

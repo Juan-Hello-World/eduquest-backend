@@ -52,4 +52,16 @@ class StudyPlanControllerTest {
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(result.getBody().getCourseName()).isEqualTo("Matematica Discreta");
     }
+
+    @Test
+    void getMyPlans_returnsOk() {
+        Authentication authentication = mock(Authentication.class);
+        when(authentication.getName()).thenReturn("alice");
+        when(studyPlanService.getMyStudyPlans("alice")).thenReturn(java.util.List.of());
+
+        ResponseEntity<java.util.List<StudyPlanResponseDTO>> result =
+                studyPlanController.getMyPlans(authentication);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
 }

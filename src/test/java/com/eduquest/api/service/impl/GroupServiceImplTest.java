@@ -84,6 +84,7 @@ class GroupServiceImplTest {
         PrivateGroup withMember = new PrivateGroup();
         withMember.setId(1L);
         withMember.setName("Con miembro");
+        withMember.setCreator(alice);
         withMember.getMembers().add(alice);
 
         PrivateGroup empty = new PrivateGroup();
@@ -98,5 +99,36 @@ class GroupServiceImplTest {
         assertThat(page.content()).hasSize(2);
         assertThat(page.content().get(0).getCreatorUsername()).isEqualTo("alice");
         assertThat(page.content().get(1).getCreatorUsername()).isEqualTo("Sin miembros");
+    }
+
+    @Test
+    void joinGroup_asNewMember_addsUserAndReturnsDto() {
+        PrivateGroup group = new PrivateGroup();
+        group.setId(1L);
+        group.setName("Grupo de Calculo");
+        group.setCreator(alice);
+
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(alice));
+        when(groupRepository.findById(1L)).thenReturn(Optional.of(group));
+        when(groupRepository.existsByIdAndMembersId(1L, 1L)).thenReturn(false);
+        when(groupRepository.save(any(PrivateGroup.class))).thenReturn(group);
+
+        GroupResponseDTO response = groupService.joinGroup(1L, "alice");
+
+        assertThat(response.getId()).isEqualTo(1L);
+        assertThat(response.getCreatorUsername()).isEqualTo("alice");
+    }
+
+    @Test
+    void joinGroup_whenAlreadyMember_throwsDuplicateResource() {
+        PrivateGroup group = new PrivateGroup();
+        group.setId(1L);
+
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(alice));
+        when(groupRepository.findById(1L)).thenReturn(Optional.of(group));
+        when(groupRepository.existsByIdAndMembersId(1L, 1L)).thenReturn(true);
+
+        assertThatThrownBy(() -> groupService.joinGroup(1L, "alice"))
+                .isInstanceOf(com.eduquest.api.exception.DuplicateResourceException.class);
     }
 }

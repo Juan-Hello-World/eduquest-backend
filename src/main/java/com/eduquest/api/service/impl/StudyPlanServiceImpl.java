@@ -14,6 +14,8 @@ import com.eduquest.api.service.StudyPlanService;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class StudyPlanServiceImpl implements StudyPlanService {
@@ -59,6 +61,16 @@ public class StudyPlanServiceImpl implements StudyPlanService {
                 this, username, request.getCourseName(), request.getDifficulty()));
 
         return mapToResponseDTO(savedPlan);
+    }
+    @Override
+    @Transactional(readOnly = true)
+    public List<StudyPlanResponseDTO> getMyStudyPlans(String username) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado"));
+
+        return studyPlanRepository.findByUserId(user.getId()).stream()
+                .map(this::mapToResponseDTO)
+                .collect(Collectors.toList());
     }
 
     private StudyPlanResponseDTO mapToResponseDTO(StudyPlan plan) {

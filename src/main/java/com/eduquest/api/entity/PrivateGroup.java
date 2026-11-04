@@ -31,6 +31,9 @@ public class PrivateGroup {
     @Column(columnDefinition = "TEXT")
     private String description;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "creator_id")
+    private User creator;
 
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(

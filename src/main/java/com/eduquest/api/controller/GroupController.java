@@ -39,7 +39,7 @@ public class GroupController {
             Authentication authentication) {
         String username = authentication.getName();
         GroupResponseDTO response = groupService.createGroup(request, username);
-        return new ResponseEntity<>(response, HttpStatus.CREATED);
+        return new ResponseEntity<GroupResponseDTO>(response, HttpStatus.CREATED);
     }
 
     @GetMapping
@@ -48,7 +48,7 @@ public class GroupController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
         Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
-        return new ResponseEntity<>(groupService.getAllGroups(pageable), HttpStatus.OK);
+        return new ResponseEntity<PageResponseDTO<GroupResponseDTO>>(groupService.getAllGroups(pageable), HttpStatus.OK);
     }
 
     @PostMapping("/{groupId}/documents")
@@ -60,6 +60,29 @@ public class GroupController {
             Authentication authentication) {
         String username = authentication.getName();
         DocumentResponseDTO response = documentService.uploadDocumentToGroup(groupId, request, username);
-        return new ResponseEntity<>(response, HttpStatus.CREATED);
+        return new ResponseEntity<DocumentResponseDTO>(response, HttpStatus.CREATED);
+    }
+
+    @PostMapping("/{groupId}/join")
+    @PreAuthorize("hasAuthority('ROLE_USER') or hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_MANAGER')")
+    @Operation(summary = "Unirse a un grupo", description = "Agrega al usuario autenticado como miembro del grupo (409 si ya es miembro).")
+    public ResponseEntity<GroupResponseDTO> joinGroup(
+            @PathVariable Long groupId,
+            Authentication authentication) {
+        String username = authentication.getName();
+        return ResponseEntity.ok(groupService.joinGroup(groupId, username));
+    }
+
+    @GetMapping("/{groupId}/documents")
+    @PreAuthorize("hasAuthority('ROLE_USER') or hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_MANAGER')")
+    @Operation(summary = "Listar documentos de un grupo", description = "Devuelve los documentos paginados del grupo. 403 si no es miembro.")
+    public ResponseEntity<PageResponseDTO<DocumentResponseDTO>> getGroupDocuments(
+            @PathVariable Long groupId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            Authentication authentication) {
+        Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
+        String username = authentication.getName();
+        return ResponseEntity.ok(documentService.getDocumentsByGroup(groupId, username, pageable));
     }
 }

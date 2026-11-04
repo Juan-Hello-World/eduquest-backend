@@ -22,8 +22,6 @@ public class StudyPlan {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String title;
-
     @NotBlank
     @Size(max = 100)
     @Column(nullable = false)

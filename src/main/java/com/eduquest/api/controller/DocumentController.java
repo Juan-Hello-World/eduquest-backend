@@ -39,11 +39,13 @@ public class DocumentController {
     }
 
     @GetMapping
-    @Operation(summary = "Listar documentos", description = "Devuelve documentos paginados.")
+    @Operation(summary = "Listar documentos", description = "Devuelve documentos paginados. Permite filtrar por texto (search) y etiqueta (tag). ")
     public ResponseEntity<PageResponseDTO<DocumentResponseDTO>> getAllDocuments(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String tag) {
         Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100));
-        return new ResponseEntity<>(documentService.getAllDocuments(pageable), HttpStatus.OK);
+        return new ResponseEntity<>(documentService.getAllDocuments(search, tag, pageable), HttpStatus.OK);
     }
 }

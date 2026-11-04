@@ -9,4 +9,6 @@ public interface DocumentService {
     DocumentResponseDTO createDocument(DocumentRequestDTO request, String username);
     DocumentResponseDTO uploadDocumentToGroup(Long groupId, DocumentRequestDTO request, String username);
     PageResponseDTO<DocumentResponseDTO> getAllDocuments(Pageable pageable);
+    PageResponseDTO<DocumentResponseDTO> getAllDocuments(String search, String tag, Pageable pageable);
+    PageResponseDTO<DocumentResponseDTO> getDocumentsByGroup(Long groupId, String username, Pageable pageable);
 }

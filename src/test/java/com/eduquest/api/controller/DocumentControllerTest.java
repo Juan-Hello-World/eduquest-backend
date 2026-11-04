@@ -63,9 +63,10 @@ class DocumentControllerTest {
     void getAllDocuments_returnsPaginatedResponse() {
         PageResponseDTO<DocumentResponseDTO> page =
                 new PageResponseDTO<>(List.of(response()), 0, 10, 1, 1);
-        when(documentService.getAllDocuments(any())).thenReturn(page);
+        when(documentService.getAllDocuments(any(), any(), any())).thenReturn(page);
 
-        ResponseEntity<PageResponseDTO<DocumentResponseDTO>> result = documentController.getAllDocuments(0, 10);
+        ResponseEntity<PageResponseDTO<DocumentResponseDTO>> result =
+                documentController.getAllDocuments(0, 10, null, null);
 
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(result.getBody().content()).hasSize(1);
@@ -73,10 +74,10 @@ class DocumentControllerTest {
 
     @Test
     void getAllDocuments_clampsInvalidParams() {
-        when(documentService.getAllDocuments(any())).thenReturn(
+        when(documentService.getAllDocuments(any(), any(), any())).thenReturn(
                 new PageResponseDTO<>(List.of(), 0, 1, 0, 0));
 
-        documentController.getAllDocuments(-5, 1000);
+        documentController.getAllDocuments(-5, 1000, "calculo", "Matematicas");
 
         assertThat(true).isTrue();
     }

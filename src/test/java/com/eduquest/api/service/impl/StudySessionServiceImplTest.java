@@ -85,23 +85,13 @@ class StudySessionServiceImplTest {
     void getSessionsByGroup_returnsOnlySessionsOfThatGroup() {
         when(groupRepository.existsById(1L)).thenReturn(true);
 
-        PrivateGroup other = new PrivateGroup();
-        other.setId(2L);
-        other.setName("Otro grupo");
-
         StudySession session1 = new StudySession();
         session1.setId(1L);
         session1.setTitle("De este grupo");
         session1.setScheduledAt(scheduled);
         session1.setPrivateGroup(group);
 
-        StudySession session2 = new StudySession();
-        session2.setId(2L);
-        session2.setTitle("De otro grupo");
-        session2.setScheduledAt(scheduled);
-        session2.setPrivateGroup(other);
-
-        when(sessionRepository.findAll()).thenReturn(List.of(session1, session2));
+        when(sessionRepository.findByPrivateGroupId(1L)).thenReturn(List.of(session1));
 
         List<StudySessionResponseDTO> sessions = studySessionService.getSessionsByGroup(1L);
 
