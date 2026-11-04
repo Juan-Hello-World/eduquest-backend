@@ -129,9 +129,18 @@ public class DocumentServiceImpl implements DocumentService {
     public PageResponseDTO<DocumentResponseDTO> getAllDocuments(String search, String tag, Pageable pageable) {
         Page<Document> documentPage;
         if ((search == null || search.isBlank()) && (tag == null || tag.isBlank())) {
-            documentPage = documentRepository.findAll(pageable);
+            documentPage = documentRepository.findByGroupIsNull(pageable);
         } else {
-            documentPage = documentRepository.searchPublicDocuments(search, tag, pageable);
+            String searchPattern = null;
+            if (search != null && !search.isBlank()) {
+                String sanitized = search.trim().toLowerCase()
+                        .replace("\\", "\\\\")
+                        .replace("%", "\\%")
+                        .replace("_", "\\_");
+                searchPattern = "%" + sanitized + "%";
+            }
+            String cleanTag = (tag != null && !tag.isBlank()) ? tag.trim().toLowerCase() : null;
+            documentPage = documentRepository.searchPublicDocuments(searchPattern, cleanTag, pageable);
         }
         List<DocumentResponseDTO> content = documentPage.getContent().stream()
                 .map(this::mapToResponseDTO)

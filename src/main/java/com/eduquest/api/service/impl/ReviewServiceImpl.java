@@ -18,6 +18,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.eduquest.api.exception.ForbiddenException;
+import com.eduquest.api.repository.PrivateGroupRepository;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -28,12 +30,16 @@ public class ReviewServiceImpl implements ReviewService {
     private final ReviewRepository reviewRepository;
     private final DocumentRepository documentRepository;
     private final UserRepository userRepository;
+    private final PrivateGroupRepository groupRepository;
 
-    public ReviewServiceImpl(ReviewRepository reviewRepository, DocumentRepository documentRepository,
-                             UserRepository userRepository) {
+    public ReviewServiceImpl(ReviewRepository reviewRepository,
+                             DocumentRepository documentRepository,
+                             UserRepository userRepository,
+                             PrivateGroupRepository groupRepository) {
         this.reviewRepository = reviewRepository;
         this.documentRepository = documentRepository;
         this.userRepository = userRepository;
+        this.groupRepository = groupRepository;
     }
 
     @Override
@@ -44,6 +50,11 @@ public class ReviewServiceImpl implements ReviewService {
 
         Document document = documentRepository.findById(request.getDocumentId())
                 .orElseThrow(() -> new ResourceNotFoundException("Documento no encontrado"));
+
+        if (document.getGroup()!=null &&
+            !groupRepository.existsByIdAndMembersId(document.getGroup().getId(), author.getId())){
+            throw new ForbiddenException("Debes ser miembro del grupo para reseñar este documento");
+        }
 
         if (reviewRepository.existsByAuthorIdAndDocumentId(author.getId(), document.getId())) {
             throw new DuplicateResourceException("Ya has reseñado este documento");

@@ -123,8 +123,8 @@ class DocumentServiceImplTest {
     @Test
     void getAllDocuments_returnsPaginatedContent() {
         Pageable pageable = PageRequest.of(0, 10);
-        when(documentRepository.findAll(pageable))
-                .thenReturn(new PageImpl<>(List.of(document), pageable, 1));
+        when(documentRepository.findByGroupIsNull(pageable))
+                .thenReturn(new PageImpl<Document>(List.of(document), pageable, 1));
 
         PageResponseDTO<DocumentResponseDTO> page = documentService.getAllDocuments(pageable);
 
@@ -234,5 +234,25 @@ class DocumentServiceImplTest {
 
         assertThatThrownBy(() -> documentService.getDocumentsByGroup(1L, "alice", pageable))
                 .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void getAllDocuments_returnsPaginatedDtosWithNullAndPresentGroup() {
+        Document inGroup = new Document();
+        inGroup.setId(11L);
+        inGroup.setTitle("Con grupo");
+        inGroup.setFileUrl("https://cloud.example/g.pdf");
+        inGroup.setAuthor(user);
+        inGroup.setGroup(group);
+
+        Pageable pageable = PageRequest.of(0, 10);
+        when(documentRepository.findByGroupIsNull(pageable))
+                .thenReturn(new PageImpl<Document>(List.of(document, inGroup), pageable, 2));
+
+        PageResponseDTO<DocumentResponseDTO> page = documentService.getAllDocuments(pageable);
+
+        assertThat(page.content()).hasSize(2);
+        assertThat(page.content().get(0).getGroupName()).isNull();
+        assertThat(page.content().get(1).getGroupName()).isEqualTo("Grupo 1");
     }
 }

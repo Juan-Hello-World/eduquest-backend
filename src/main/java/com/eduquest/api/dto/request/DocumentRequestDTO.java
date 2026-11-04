@@ -1,6 +1,7 @@
 package com.eduquest.api.dto.request;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
@@ -16,6 +17,7 @@ public class DocumentRequestDTO {
     private String description;
 
     @NotBlank
+    @Pattern(regexp="^https?://.+", message = "La URL del archivo debe comenzar con http:// o https://")
     private String fileUrl;
 
     private Set<String> tags;

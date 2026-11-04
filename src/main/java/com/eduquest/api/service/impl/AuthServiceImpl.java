@@ -127,6 +127,8 @@ public class AuthServiceImpl implements AuthService {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new UnauthorizedException("Usuario no encontrado"));
 
-        return buildAuthResponse(UserPrincipal.build(user), extractRoleNames(user));
+        AuthResponseDTO response = buildAuthResponse(UserPrincipal.build(user), extractRoleNames(user));
+        response.setRefreshToken(refreshToken);
+        return response;
     }
 }

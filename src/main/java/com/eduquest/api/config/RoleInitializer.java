@@ -5,51 +5,57 @@ import com.eduquest.api.entity.RoleName;
 import com.eduquest.api.entity.User;
 import com.eduquest.api.repository.RoleRepository;
 import com.eduquest.api.repository.UserRepository;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.jspecify.annotations.NonNull;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Collections;
+import java.util.Set;
 
 @Component
 public class RoleInitializer implements CommandLineRunner {
-
-    private static final Logger log = LoggerFactory.getLogger(RoleInitializer.class);
 
     private final RoleRepository roleRepository;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
 
-    public RoleInitializer(RoleRepository roleRepository, UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    @Value("${admin.initial.password:}")
+    private String adminInitialPassword;
+
+    public RoleInitializer(RoleRepository roleRepository,
+                           UserRepository userRepository,
+                           PasswordEncoder passwordEncoder) {
         this.roleRepository = roleRepository;
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
     @Override
-    public void run(String... args) {
-        seedRole(RoleName.ROLE_USER);
-        seedRole(RoleName.ROLE_ADMIN);
-        seedRole(RoleName.ROLE_MANAGER);
+    @Transactional
+    public void run(String @NonNull ... args) {
+        createRoleIfNotFound(RoleName.ROLE_USER);
+        createRoleIfNotFound(RoleName.ROLE_MANAGER);
+        Role adminRole = createRoleIfNotFound(RoleName.ROLE_ADMIN);
 
-        if (!userRepository.existsByUsername("admin")) {
-            Role adminRole = roleRepository.findByName(RoleName.ROLE_ADMIN).orElseThrow();
+        // Solo crea el usuario admin inicial si se proveyó una contraseña por configuración/variable de entorno
+        if (adminInitialPassword != null && !adminInitialPassword.isBlank()
+                && userRepository.findByUsername("admin").isEmpty()) {
             User admin = new User();
             admin.setUsername("admin");
-            admin.setEmail("admin@utec.edu.pe");
-            admin.setPassword(passwordEncoder.encode("admin123"));
-            admin.setRoles(Collections.singleton(adminRole));
+            admin.setEmail("admin@eduquest.com");
+            admin.setPassword(passwordEncoder.encode(adminInitialPassword));
+            admin.setRoles(Set.of(adminRole));
             userRepository.save(admin);
-            log.info("Usuario admin creado: admin@utec.edu.pe / admin123");
         }
     }
 
-    private void seedRole(RoleName name) {
-        if (roleRepository.findByName(name).isEmpty()) {
-            roleRepository.save(new Role(null, name));
-            log.info("Rol creado: {}", name);
-        }
+    private Role createRoleIfNotFound(RoleName name) {
+        return roleRepository.findByName(name).orElseGet(() -> {
+            Role role = new Role();
+            role.setName(name);
+            return roleRepository.save(role);
+        });
     }
 }

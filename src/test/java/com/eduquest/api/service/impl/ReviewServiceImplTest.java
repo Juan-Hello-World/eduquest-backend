@@ -41,6 +41,7 @@ import static org.mockito.Mockito.when;
 @MockitoSettings(strictness = Strictness.LENIENT)
 class ReviewServiceImplTest {
 
+    @Mock com.eduquest.api.repository.PrivateGroupRepository groupRepository;
     @Mock ReviewRepository reviewRepository;
     @Mock DocumentRepository documentRepository;
     @Mock UserRepository userRepository;
@@ -200,5 +201,24 @@ class ReviewServiceImplTest {
 
         assertThatThrownBy(() -> reviewService.deleteReview(99L, "alice"))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void createReview_whenDocumentInGroupAndUserNotMember_throwsForbidden() {
+        com.eduquest.api.entity.PrivateGroup group = new com.eduquest.api.entity.PrivateGroup();
+        group.setId(5L);
+        document.setGroup(group);
+
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(alice));
+        when(documentRepository.findById(1L)).thenReturn(Optional.of(document));
+        when(groupRepository.existsByIdAndMembersId(5L, 1L)).thenReturn(false);
+
+        ReviewRequestDTO req = new ReviewRequestDTO();
+        req.setDocumentId(1L);
+        req.setRating(5);
+        req.setComment("Excelente");
+
+        assertThatThrownBy(() -> reviewService.createReview(req, "alice"))
+                .isInstanceOf(com.eduquest.api.exception.ForbiddenException.class);
     }
 }

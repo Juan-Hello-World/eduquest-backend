@@ -24,4 +24,5 @@ Page<Document> searchPublicDocuments(@Param("searchPattern") String searchPatter
                                      Pageable pageable);
 
 Page<Document> findByGroupId(Long groupId, Pageable pageable);
+Page<Document> findByGroupIsNull(Pageable pageable);
 }

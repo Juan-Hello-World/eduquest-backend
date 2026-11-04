@@ -5,6 +5,6 @@ import com.eduquest.api.dto.response.StudySessionResponseDTO;
 import java.util.List;
 
 public interface StudySessionService {
-    StudySessionResponseDTO createSession(Long groupId, StudySessionRequestDTO request);
-    List<StudySessionResponseDTO> getSessionsByGroup(Long groupId);
+    StudySessionResponseDTO scheduleSession(Long groupId, StudySessionRequestDTO request, String username);
+    List<StudySessionResponseDTO> getSessionsByGroup(Long groupId, String username);
 }
