@@ -37,3 +37,19 @@ build/
 
 ### Material de clase (referencia) ###
 DBP/
+
+### Salidas de Claude (no son parte del proyecto) ###
+Claude outputs/
+
+### Variantes de .env (se permite subir .env.example) ###
+.env.*
+!.env.example
+
+### Logs ###
+*.log
+logs/
+
+### Archivos del sistema operativo ###
+.DS_Store
+Thumbs.db
+desktop.ini

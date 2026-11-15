@@ -63,10 +63,10 @@ class DocumentControllerTest {
     void getAllDocuments_returnsPaginatedResponse() {
         PageResponseDTO<DocumentResponseDTO> page =
                 new PageResponseDTO<>(List.of(response()), 0, 10, 1, 1);
-        when(documentService.getAllDocuments(any(), any(), any())).thenReturn(page);
+        when(documentService.getAllDocuments(any(), any(), any(), any(), any())).thenReturn(page);
 
         ResponseEntity<PageResponseDTO<DocumentResponseDTO>> result =
-                documentController.getAllDocuments(0, 10, null, null);
+                documentController.getAllDocuments(0, 10, null, null, null, null, null);
 
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(result.getBody().content()).hasSize(1);
@@ -74,11 +74,47 @@ class DocumentControllerTest {
 
     @Test
     void getAllDocuments_clampsInvalidParams() {
-        when(documentService.getAllDocuments(any(), any(), any())).thenReturn(
+        when(documentService.getAllDocuments(any(), any(), any(), any(), any())).thenReturn(
                 new PageResponseDTO<>(List.of(), 0, 1, 0, 0));
 
-        documentController.getAllDocuments(-5, 1000, "calculo", "Matematicas");
+        documentController.getAllDocuments(-5, 1000, "calculo", "Matematicas", "Calculo I", "UTEC", "title");
 
         assertThat(true).isTrue();
+    }
+
+    @Test
+    void getAllDocuments_mapsSortParam() {
+        when(documentService.getAllDocuments(any(), any(), any(), any(), any())).thenReturn(
+                new PageResponseDTO<>(List.of(), 0, 10, 0, 0));
+        org.mockito.ArgumentCaptor<org.springframework.data.domain.Pageable> captor =
+                org.mockito.ArgumentCaptor.forClass(org.springframework.data.domain.Pageable.class);
+
+        documentController.getAllDocuments(0, 10, null, null, null, null, "oldest");
+        documentController.getAllDocuments(0, 10, null, null, null, null, "title");
+        documentController.getAllDocuments(0, 10, null, null, null, null, null);
+
+        org.mockito.Mockito.verify(documentService, org.mockito.Mockito.times(3))
+                .getAllDocuments(any(), any(), any(), any(), captor.capture());
+        List<org.springframework.data.domain.Pageable> calls = captor.getAllValues();
+        assertThat(calls.get(0).getSort().getOrderFor("uploadedAt").isAscending()).isTrue();
+        assertThat(calls.get(1).getSort().getOrderFor("title")).isNotNull();
+        assertThat(calls.get(2).getSort().getOrderFor("uploadedAt").isDescending()).isTrue();
+    }
+
+    @Test
+    void savedEndpoints_delegateToService() {
+        Authentication authentication = mock(Authentication.class);
+        when(authentication.getName()).thenReturn("alice");
+        when(documentService.getSavedDocuments(org.mockito.ArgumentMatchers.eq("alice"), any()))
+                .thenReturn(new PageResponseDTO<>(List.of(response()), 0, 10, 1, 1));
+        when(documentService.getSavedDocumentIds("alice")).thenReturn(List.of(1L));
+
+        assertThat(documentController.getSavedDocuments(0, 10, authentication).getBody().content()).hasSize(1);
+        assertThat(documentController.getSavedDocumentIds(authentication).getBody()).containsExactly(1L);
+        assertThat(documentController.saveDocument(1L, authentication).getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(documentController.unsaveDocument(1L, authentication).getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+
+        org.mockito.Mockito.verify(documentService).saveDocument(1L, "alice");
+        org.mockito.Mockito.verify(documentService).unsaveDocument(1L, "alice");
     }
 }

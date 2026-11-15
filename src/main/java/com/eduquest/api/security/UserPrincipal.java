@@ -7,6 +7,7 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -19,14 +20,26 @@ public class UserPrincipal implements UserDetails {
     private final String email;
     private final String password;
     private final Collection<? extends GrantedAuthority> authorities;
+    private final boolean banned;
+    private final String banReason;
+    private final LocalDateTime bannedAt;
 
     public UserPrincipal(Long id, String username, String email, String password,
                          Collection<? extends GrantedAuthority> authorities) {
+        this(id, username, email, password, authorities, false, null, null);
+    }
+
+    public UserPrincipal(Long id, String username, String email, String password,
+                         Collection<? extends GrantedAuthority> authorities,
+                         boolean banned, String banReason, LocalDateTime bannedAt) {
         this.id = id;
         this.username = username;
         this.email = email;
         this.password = password;
         this.authorities = authorities;
+        this.banned = banned;
+        this.banReason = banReason;
+        this.bannedAt = bannedAt;
     }
 
     public static UserPrincipal build(User user) {
@@ -40,7 +53,10 @@ public class UserPrincipal implements UserDetails {
                 user.getUsername(),
                 user.getEmail(),
                 user.getPassword(),
-                authorities
+                authorities,
+                user.isBanned(),
+                user.getBanReason(),
+                user.getBannedAt()
         );
     }
 

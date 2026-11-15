@@ -69,9 +69,21 @@ Una plataforma que centralice materiales confiables, grupos privados de asesorí
 - **Biblioteca de documentos:** subir y listar materiales académicos en la biblioteca abierta.
 - **Grupos privados:** crear grupos de estudio y listar los existentes.
 - **Sesiones de asesoría:** reservar y listar sesiones de estudio dentro de un grupo privado, con enlace de reunión.
-- **Plan de estudio inteligente:** el usuario ingresa un curso y su dificultad percibida; el backend consulta a OpenAI y devuelve una metodología de estudio generada.
+- **Plan de estudio personalizado:** el usuario ingresa un curso y su dificultad percibida; el backend devuelve una metodología de estudio generada. Si el proveedor externo no está disponible (por ejemplo, sin créditos), se devuelve un plan base generado localmente para no interrumpir la experiencia.
 - **Reseñas:** calificar y comentar documentos (1–5 estrellas) con validación de una reseña por usuario y por documento.
 - **Administración de usuarios:** el rol ADMIN/MANAGER puede listar usuarios y el ADMIN puede cambiar roles.
+- **Perfil de asesor:** al registrarse o desde el perfil, el usuario puede marcarse como asesor; se muestra en miembros, sesiones, chat y ranking.
+- **Biblioteca con curso y universidad:** cada material puede indicar su curso y su universidad o colegio, y la biblioteca filtra por ambos.
+- **Favoritos:** guardar materiales en "Mis guardados".
+- **Chat de grupo:** mensajes entre los miembros del grupo con historial paginado y actualización periódica desde los clientes.
+- **Asistencia y reseñas de asesorías:** confirmar asistencia a una sesión y, cuando termina, calificarla de 1 a 5 estrellas (una vez por persona y no por quien la dictó).
+- **Grabación de la asesoría:** quien la agendó puede adjuntar el video de YouTube; el backend valida que exista con oEmbed y guarda su título.
+- **Plan de estudio del ciclo y progreso:** el plan puede incluir hasta 8 cursos con su dificultad; cada actividad del plan se puede marcar como hecha y el avance se guarda.
+- **Logros y ranking:** puntos por aportar a la comunidad, siete insignias y ranking semanal e histórico.
+- **Reportes y moderación:** cualquier usuario reporta materiales o usuarios; ADMIN/MANAGER revisan la bandeja y el ADMIN puede vetar o eliminar el material reportado.
+- **Notificaciones:** cada usuario recibe avisos cuando alguien se une a uno de sus grupos, comparte material o agenda una asesoría, cuando desbloquea una insignia y cuando le escriben por mensaje directo. El ADMIN puede enviar avisos a toda la comunidad o a una persona.
+- **Mensajes directos:** conversaciones uno a uno entre usuarios, con contador de no leídos y búsqueda de personas por nombre de usuario.
+- **Mensajes sin leer del chat de grupo:** cada grupo informa cuántos mensajes nuevos hay desde la última vez que el usuario abrió el chat.
 
 ### Tecnologías Utilizadas
 
@@ -80,7 +92,7 @@ Una plataforma que centralice materiales confiables, grupos privados de asesorí
 - **JWT (jjwt 0.12.6)** para autenticación sin estado.
 - **Lombok** para reducir código repetitivo en entidades y DTOs.
 - **Thymeleaf** para plantillas HTML de correos.
-- **API externa de OpenAI (gpt-4o-mini)** para la generación de planes de estudio.
+- **API de Google Gemini (gemini-3.5-flash-lite)** para la generación de planes de estudio.
 - **Docker / Docker Compose** para la base de datos local.
 
 ## Modelo de Entidades
@@ -92,8 +104,13 @@ User ──< Document >──< Tag
 User >──< Role
 User ──< Review >── Document
 User ──< StudyPlan
+User >──< Document (saved_documents)
 PrivateGroup ──< Document
 PrivateGroup ──< StudySession
+PrivateGroup ──< GroupMessage >── User
+StudySession ──< SessionAttendance >── User
+StudySession ──< SessionReview >── User
+User ──< Report
 ```
 
 ### Descripción de Entidades
@@ -105,7 +122,11 @@ PrivateGroup ──< StudySession
 - **Review:** reseña de un documento (rating 1–5) con restricción única `(user_id, document_id)`.
 - **StudyPlan:** plan de estudio generado por IA, asociado a un usuario (ManyToOne con `User`).
 - **PrivateGroup:** grupo privado de estudio tipo servidor, con miembros (ManyToMany con `User`).
-- **StudySession:** sesión de asesoría programada dentro de un grupo, con enlace de reunión.
+- **StudySession:** sesión de asesoría programada dentro de un grupo, con enlace de reunión y, opcionalmente, la grabación de YouTube.
+- **SessionAttendance:** confirmación de asistencia de un usuario a una sesión (única por sesión y usuario).
+- **SessionReview:** calificación de 1 a 5 de una asesoría terminada (única por sesión y usuario).
+- **GroupMessage:** mensaje del chat de un grupo, con autor y fecha.
+- **Report:** reporte de un material o de un usuario, con motivo, estado (`OPEN`, `RESOLVED`, `DISMISSED`) y quién lo cerró.
 
 Las relaciones usan `FetchType.LAZY` para las asociaciones de colección y `FetchType.EAGER` únicamente para los roles del usuario (cargados en cada autenticación). La colección dueña `Document.tags` usa `cascade = {PERSIST, MERGE}`: el cascade permite persistir y actualizar en cascada las etiquetas al crear o editar el agregado, mientras que los borrados y las asociaciones que referencian entidades ya existentes (roles y miembros de grupos) se gestionan explícitamente en el servicio.
 
@@ -127,7 +148,7 @@ Cliente (Postman / Frontend)
 └─────────────────────────────────────────────────────────────────────┘
         │                        │                          │
         ▼                        ▼                          ▼
-   PostgreSQL 18 (JPA)    OpenAI gpt-4o-mini (RestTemplate)    SMTP Gmail
+   PostgreSQL 18 (JPA)    Gemini gemini-3.5-flash-lite (RestTemplate)    SMTP Gmail
 ```
 
 - **Controller → Service → Repository:** los controladores solo orquestan HTTP y validan con `@Valid`; la lógica de negocio y las decisiones de autorización viven en los servicios detrás de interfaces, por lo que los controladores se mantienen delgados.
@@ -148,7 +169,7 @@ Todas las excepciones se centralizan en `GlobalExceptionHandler` (`@RestControll
 - 403 – acceso denegado por rol o por falta de permisos sobre el recurso.
 - 404 – recurso no encontrado.
 - 409 – conflicto (usuario o documento duplicado, reseña ya existente).
-- 500 – error externo (por ejemplo, fallo al llamar a OpenAI).
+- 503 – servicio externo no disponible (por ejemplo, fallo al llamar al proveedor de planes de estudio).
 
 Las excepciones personalizadas (`ResourceNotFoundException`, `DuplicateResourceException`, `InvalidCredentialsException`, `UnauthorizedException`, `ForbiddenException`, `InvalidOperationException`, `BadRequestException`, `ExternalServiceException`) permiten expresar la causa de negocio de cada error y mantener los controladores limpios.
 
@@ -159,12 +180,12 @@ Las excepciones personalizadas (`ResourceNotFoundException`, `DuplicateResourceE
 - **JWT stateless:** `JwtService` genera tokens firmados con `Keys.hmacShaKeyFor(secret)` (secret en variable de entorno, mínimo 64 caracteres → HS512). El token incluye claims de `userId`, `email` y `roles`.
 - **Access y refresh tokens:** los tokens de refresh se usan solo en `/auth/refresh`; el filtro rechaza usarlos en endpoints protegidos.
 - **Contraseñas** cifradas con `BCryptPasswordEncoder`.
-- **Autorización por roles:** `@PreAuthorize` en métodos sensibles. Creamos un admin inicial (`admin@utec.edu.pe`/`admin123`) mediante un inicializador idempotente.
+- **Autorización por roles:** `@PreAuthorize` en métodos sensibles. El `RoleInitializer` crea el usuario `admin` (email `admin@eduquest.com`) con la contraseña definida en `ADMIN_INITIAL_PASSWORD`; si la variable no está definida, no se crea ningún administrador.
 - El filtro `JwtAuthorizationFilter` valida el header `Authorization: Bearer <token>` y carga el `UserPrincipal` en el `SecurityContext`.
 
 ### Prevención de Vulnerabilidades
 
-- **Variables de entorno** para secretos (`JWT_SECRET`, credenciales de BD y de Gmail, `OPENAI_API_KEY`); `.env` y `.dockerignore` evitan subir credenciales al repositorio.
+- **Variables de entorno** para secretos (`JWT_SECRET`, credenciales de BD y de Gmail, `GEMINI_API_KEY`); `.env` y `.dockerignore` evitan subir credenciales al repositorio.
 - **CSRF deshabilitado** solo por ser una API sin estado (no usa cookies de sesión).
 - **Validación de entrada** en todos los DTOs (`@Valid`, `@Email`, `@NotBlank`, `@Size`, `@Pattern`).
 - **Consultas por repositorio (JPA)** que previenen inyección SQL.
@@ -172,13 +193,16 @@ Las excepciones personalizadas (`ResourceNotFoundException`, `DuplicateResourceE
 
 ## Eventos y Asincronía
 
-El sistema publica tres eventos personalizados (`ApplicationEvent`) procesados de forma asíncrona con `@TransactionalEventListener(AFTER_COMMIT)` + `@Async`:
+El sistema publica eventos personalizados (`ApplicationEvent`) procesados de forma asíncrona con `@TransactionalEventListener(AFTER_COMMIT)` + `@Async`:
 
 1. **`OnUserRegistrationEvent`:** tras el commit del registro, se envía un correo HTML de bienvenida usando plantillas Thymeleaf.
 2. **`OnDocumentUploadedEvent`:** al subir un documento se notifica al autor por correo (tarea que no debe bloquear la respuesta HTTP).
 3. **`OnStudyPlanGeneratedEvent`:** se registra el procesamiento del plan generado (logging automatizado).
+4. **`OnGroupActivityEvent`:** un nuevo integrante, material o asesoría en un grupo genera una notificación para los demás miembros.
+5. **`OnDirectMessageSentEvent`:** notifica al destinatario de un mensaje directo; los mensajes seguidos del mismo remitente se agrupan en una sola notificación mientras no se lea.
+6. **`OnUserActivityEvent`:** tras aportar (material, reseña, asesoría, asistencia o avance del plan) se revisan las insignias y se notifica cada una nueva.
 
-La asincronía está configurada con `@EnableAsync` y un `ThreadPoolTaskExecutor` con `threadNamePrefix = "EmailThread-"`. Se usan transacciones (`@Transactional`) y el commit como punto de disparo para no enviar correos de operaciones que luego fallan. La comunicación por eventos desacopla publicación (`ApplicationEventPublisher`) y consumidor (`@EventListener`).
+La asincronía está configurada con `@EnableAsync` y un `ThreadPoolTaskExecutor` con `threadNamePrefix = "EduQuestAsync-"`. Se usan transacciones (`@Transactional`) y el commit como punto de disparo para no enviar correos de operaciones que luego fallan. La comunicación por eventos desacopla publicación (`ApplicationEventPublisher`) y consumidor (`@EventListener`).
 
 ## Instalación y Ejecución Local
 
@@ -191,7 +215,7 @@ La asincronía está configurada con `@EnableAsync` y un `ThreadPoolTaskExecutor
 
 La suite de pruebas unitarias e integración alcanza un **~98% de cobertura (instrucciones)**, muy por encima del umbral mínimo de **80%** que exige la fase `verify`:
 
-- **Unitarias** (Mockito + AssertJ): servicios (`Auth`, `Document`, `Group`, `Review`, `StudySession`, `StudyPlan`, `Admin`, `OpenAI`, `Email`), seguridad (`JwtService`, `JwtAuthorizationFilter`, `UserDetailsServiceImpl`, `UserPrincipal`), eventos asíncronos, `RoleInitializer` y `GlobalExceptionHandler`.
+- **Unitarias** (Mockito + AssertJ): servicios (`Auth`, `Document`, `Group`, `Review`, `StudySession`, `StudyPlan`, `Admin`, `Gemini`, `Email`), seguridad (`JwtService`, `JwtAuthorizationFilter`, `UserDetailsServiceImpl`, `UserPrincipal`), eventos asíncronos, `RoleInitializer` y `GlobalExceptionHandler`.
 - **Controladores** (8): verificación de respuestas HTTP y delegación al servicio (incluyendo autenticación vía `Authentication`/`UserPrincipal`).
 - **Integración** (`AuthFlowIntegrationTest`, perfil `test` con H2): registro y login, perfil del usuario autenticado, protección de endpoints sin token, paginación real, subida de documentos a un grupo (403 si no eres miembro, 201 si sí) y gestión de roles (ADMIN cambia rol, MANAGER lista pero no cambia, USER no lista).
 - **Medición**: JaCoCo genera el reporte en `target/site/jacoco/index.html` y falla el build si la cobertura baja del 80%.
@@ -200,7 +224,7 @@ Ejecutar con: `./mvnw verify`
 
 ## Variables de Entorno
 
-`DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `JWT_SECRET`, `JWT_EXPIRATION_ACCESS`, `JWT_EXPIRATION_REFRESH`, `MAIL_USER`, `MAIL_APP_PASSWORD`, `OPENAI_API_KEY`. Todas se cargan en `application.properties` mediante `spring.config.import=optional:file:./.env[.properties]` y, en producción, son provistas por la plataforma de despliegue.
+`DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `JWT_SECRET`, `JWT_EXPIRATION_ACCESS`, `JWT_EXPIRATION_REFRESH`, `MAIL_USER`, `MAIL_APP_PASSWORD`, `GEMINI_API_KEY`, `GEMINI_MODEL`, `ADMIN_INITIAL_PASSWORD`, `CORS_ALLOWED_ORIGINS`, `FRONTEND_URL` (dirección de la web que se usa en el enlace del correo para recuperar la contraseña; por defecto `http://localhost:5173`). Todas se cargan en `application.properties` mediante `spring.config.import=optional:file:./.env[.properties]` y, en producción, son provistas por la plataforma de despliegue.
 
 
 ## Endpoints Documentados
@@ -208,14 +232,44 @@ Ejecutar con: `./mvnw verify`
 - `POST /api/v1/auth/register` — registro (público).
 - `POST /api/v1/auth/login` — login (público).
 - `POST /api/v1/auth/refresh` — renovar access token.
-- `GET /api/v1/users/me` — perfil del usuario autenticado.
+- `POST /api/v1/auth/forgot-password` con `{ "email": "..." }` — envía por correo un código de 6 dígitos (vence en 15 minutos) y un enlace a la web. Responde 202 aunque el correo no exista, para no revelar qué cuentas hay.
+- `POST /api/v1/auth/reset-password` con `{ "email", "code", "password" }` — cambia la contraseña con el código (máximo 5 intentos por código; 400 si no es válido o venció).
+- `GET /api/v1/users/me` — perfil del usuario autenticado (incluye `avatarUrl`).
+- `PATCH /api/v1/users/me/password` con `{ "currentPassword", "newPassword" }` — cambiar la contraseña desde el perfil (400 si la actual no coincide).
+- `PATCH /api/v1/users/me` — cambiar el nombre de usuario; devuelve tokens nuevos porque el nombre es el `subject` del JWT (409 si ya existe).
+- `PUT /api/v1/users/me/avatar` — subir foto de perfil (`multipart/form-data`, campo `file`, JPG/PNG/WEBP hasta 2 MB).
+- `DELETE /api/v1/users/me/avatar` — quitar la foto de perfil.
+- `GET /api/v1/users/{id}/avatar` — imagen de perfil (pública, con caché de 7 días).
 - `GET /api/v1/admin/users?page=0&size=10` y `GET /api/v1/admin/users/{id}` — ADMIN/MANAGER (listado paginado).
 - `PATCH /api/v1/admin/users/{id}/role?role=ROLE_MANAGER` — solo ADMIN.
-- `GET /api/v1/documents?page=0&size=10` (paginado), `POST /api/v1/documents` — listar / crear documentos.
-- `POST /api/v1/groups`, `GET /api/v1/groups?page=0&size=10` — grupos (listado paginado).
+- `PATCH /api/v1/admin/users/{id}/ban` con `{ "reason": "..." }` y `PATCH /api/v1/admin/users/{id}/unban` — solo ADMIN. Veta a un usuario que incumplió las normas (no se puede vetar a sí mismo ni a otro ADMIN). Un usuario vetado recibe **403** con `code: "USER_BANNED"`, `banReason` y `bannedAt` al iniciar sesión, al registrarse con el mismo correo o usuario, al renovar el token y en cualquier petición con un token anterior.
+- `GET /api/v1/documents?page=0&size=10&search=&tag=&course=&university=&sort=recent` (paginado; `sort` admite `recent`, `oldest` o `title`), `POST /api/v1/documents` — listar / crear documentos (con `course` y `university` opcionales).
+- `GET /api/v1/documents/saved`, `GET /api/v1/documents/saved/ids`, `POST|DELETE /api/v1/documents/{documentId}/saved` — materiales guardados.
+- `POST /api/v1/groups`, `GET /api/v1/groups?page=0&size=10`, `GET /api/v1/groups/{groupId}` — grupos (listado paginado y detalle). Al crear se envía `visibility` (`PUBLIC` por defecto o `PRIVATE`); los privados exigen `password` (4-50 caracteres, se guarda con BCrypt). Cada grupo recibe un código único de 6 caracteres. El listado muestra los públicos y los privados a los que ya perteneces; un privado no es visible por id para quien no es miembro.
+- `GET /api/v1/groups?search=` — el listado admite `search` para filtrar por nombre (públicos y los privados donde ya eres miembro; un privado ajeno solo se encuentra por código).
+- `GET /api/v1/groups/mine` — tus grupos ordenados por última actividad (nuevo documento o sesión), con `unreadDocuments`, `unreadSessions` y `unreadCount` desde tu última visita. `POST /api/v1/groups/{groupId}/seen` marca el grupo como visto (204).
+- `GET /api/v1/groups/code/{code}` — busca un grupo público o privado por su código (sin distinguir mayúsculas). 404 si no existe.
+- `POST /api/v1/groups/{groupId}/join` — unirse. En grupos privados se envía `{ "password": "..." }` o `{ "inviteToken": "..." }`; 403 si no son válidos y 409 si ya eres miembro.
+- `POST /api/v1/groups/{groupId}/invite?regenerate=false` — solo el creador. Devuelve `{ code, token, expiresAt }`: un enlace de invitación que vale 7 días y deja entrar sin contraseña. Con `regenerate=true` crea uno nuevo e invalida el anterior.
+- `PUT /api/v1/groups/{groupId}/password` con `{ "password": "..." }` — solo el creador de un grupo privado. Como la contraseña se guarda con BCrypt no se puede consultar; si el creador la olvida, pone una nueva.
 - `POST /api/v1/groups/{groupId}/documents` — subir un documento al grupo. **Solo si el usuario es miembro** de ese grupo (403 en caso contrario).
-- `POST|GET /api/v1/groups/{groupId}/sessions` — sesiones de asesoría.
-- `POST /api/v1/study-plans/generate` — plan de estudio con IA.
+- `POST|GET /api/v1/groups/{groupId}/sessions` — sesiones de asesoría. El enlace de la reunión (`meetingUrl`) es obligatorio y debe empezar con `http://` o `https://`. Cada sesión indica quién la agendó (`createdByUsername`) y si el usuario actual puede gestionarla (`canManage`).
+- `PUT|DELETE /api/v1/groups/{groupId}/sessions/{sessionId}` — editar (título, descripción, fecha o enlace) o eliminar una sesión. Solo quien la agendó o el creador del grupo; 403 en otro caso.
+- `POST|DELETE /api/v1/groups/{groupId}/sessions/{sessionId}/attendance` — confirmar o cancelar asistencia (400 si la sesión ya terminó).
+- `GET|POST /api/v1/groups/{groupId}/sessions/{sessionId}/reviews` — reseñas de la asesoría. Solo después de que termine, una por persona y no por quien la agendó (409 si ya calificaste).
+- `PUT /api/v1/groups/{groupId}/sessions/{sessionId}/recording` con `{ "recordingUrl": "https://youtu.be/..." }` — adjunta o quita (vacío) la grabación. Se valida con YouTube oEmbed.
+- `GET /api/v1/groups/{groupId}/messages?after=&before=` y `POST /api/v1/groups/{groupId}/messages` — chat del grupo (solo miembros). Sin parámetros devuelve los últimos 50; `after` trae los nuevos y `before` el historial.
+- `POST /api/v1/groups/{groupId}/messages/seen` — marca el chat del grupo como leído; `GET /api/v1/groups/mine` incluye `unreadMessages`.
+- `GET /api/v1/notifications?page=0&size=15`, `GET /api/v1/notifications/unread-count`, `PATCH /api/v1/notifications/{id}/read` y `PATCH /api/v1/notifications/read-all` — campana de notificaciones.
+- `GET /api/v1/conversations`, `GET /api/v1/conversations/unread-count`, `GET /api/v1/conversations/contacts?search=` y `GET /api/v1/conversations/contacts/{userId}` — bandeja de mensajes directos y búsqueda de personas.
+- `GET /api/v1/conversations/{userId}/messages?after=&before=`, `POST /api/v1/conversations/{userId}/messages` y `POST /api/v1/conversations/{userId}/read` — conversación con una persona.
+- `POST /api/v1/admin/notifications` con `{ "title": "...", "message": "...", "username": "opcional" }` — aviso del ADMIN a todos o a un usuario.
+- `POST /api/v1/study-plans/generate` — plan de estudio personalizado: `courseName` y `difficulty` para un curso, o `courses` (lista de `{ name, difficulty }`, hasta 8) para todo el ciclo.
+- `GET /api/v1/study-plans` y `PUT /api/v1/study-plans/{planId}/progress` con `{ "completedSteps": [0, 2] }` — historial con `totalSteps` y `completedSteps`, y guardado del avance.
+- `GET /api/v1/gamification/me` y `GET /api/v1/gamification/leaderboard?period=week|all` — puntos, insignias y ranking.
+- `POST /api/v1/reports` con `{ "targetType": "DOCUMENT|USER", "targetId": 1, "reason": "..." }` — reportar contenido.
+- `GET /api/v1/admin/reports?status=OPEN`, `GET /api/v1/admin/reports/open-count`, `PATCH /api/v1/admin/reports/{id}` con `{ "status": "RESOLVED|DISMISSED" }` — bandeja de moderación (ADMIN/MANAGER).
+- `DELETE /api/v1/admin/documents/{documentId}` — eliminar un material reportado junto con sus reseñas (solo ADMIN).
 - `POST /api/v1/reviews`, `GET /api/v1/reviews/{id}`, `DELETE /api/v1/reviews/{id}` y `GET /api/v1/documents/{documentId}/reviews?page=0&size=10` — reseñas (listado paginado).
 
 La colección completa con ejemplos está en el archivo `postman_collection.json` en la raíz del repositorio.
@@ -280,7 +334,7 @@ El código vive en un repositorio central en GitHub con `main` como rama de inte
 
 ### Logros del Proyecto
 
-EduQuest entrega un backend completo en capas: modelo de 8 entidades con relaciones correctas, 16 DTOs segregados, autenticación JWT con refresh tokens y roles, manejo global de errores en formato ProblemDetail, tres eventos asíncronos con correos HTML, generador de planes de estudio basado en OpenAI y documentación interactiva con Swagger, todo desplegable en la nube con un repositorio limpio y documentado.
+EduQuest entrega un backend completo en capas: modelo de 14 entidades con relaciones correctas, 38 DTOs segregados, autenticación JWT con refresh tokens y roles, manejo global de errores en formato ProblemDetail, tres eventos asíncronos con correos HTML, generador de planes de estudio basado en Google Gemini y documentación interactiva con Swagger, todo desplegable en la nube con un repositorio limpio y documentado.
 
 ### Aprendizajes Clave
 
@@ -288,8 +342,7 @@ El equipo consolidó patrones aprendidos en el curso: arquitectura Controller→
 
 ### Trabajo Futuro
 
-- Búsqueda y filtros avanzados de documentos por etiqueta y universidad.
-- Chat en tiempo real dentro de los grupos (Socket.io/Firebase).
+- Pasar el chat de consultas periódicas a WebSocket (STOMP) para recibir los mensajes al instante.
 - Upload de archivos directo a S3/Cloudinary, incluyendo videos.
 - Integración con Google Meet/Zoom para generar enlaces de asesoría automáticamente.
 

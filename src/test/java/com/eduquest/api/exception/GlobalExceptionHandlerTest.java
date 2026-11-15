@@ -97,11 +97,11 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
-    void handleExternalService_returns500ProblemDetail() {
+    void handleExternalService_returns503ProblemDetail() {
         ProblemDetail detail = handler.handleExternalService(
-                new ExternalServiceException("OpenAI caido"), request());
+                new ExternalServiceException("Proveedor externo caido"), request());
 
-        assertThat(detail.getStatus()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR.value());
+        assertThat(detail.getStatus()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE.value());
     }
 
     @Test
@@ -167,5 +167,17 @@ class GlobalExceptionHandlerTest {
 
         public void method(String username) {
         }
+    }
+
+    @Test
+    void handleUserBanned_returns403WithCodeAndReason() {
+        ProblemDetail detail = handler.handleUserBanned(
+                new UserBannedException("Spam", java.time.LocalDateTime.of(2026, 11, 10, 9, 0)), request());
+
+        assertThat(detail.getStatus()).isEqualTo(403);
+        assertThat(detail.getProperties())
+                .containsEntry("code", "USER_BANNED")
+                .containsEntry("banReason", "Spam")
+                .containsEntry("bannedAt", "2026-11-10T09:00");
     }
 }

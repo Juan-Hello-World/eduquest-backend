@@ -1,6 +1,7 @@
 package com.eduquest.api.service.impl;
 
 import com.eduquest.api.dto.request.ReviewRequestDTO;
+import com.eduquest.api.dto.request.ReviewUpdateRequestDTO;
 import com.eduquest.api.dto.response.PageResponseDTO;
 import com.eduquest.api.dto.response.ReviewResponseDTO;
 import com.eduquest.api.entity.Document;
@@ -45,6 +46,7 @@ class ReviewServiceImplTest {
     @Mock ReviewRepository reviewRepository;
     @Mock DocumentRepository documentRepository;
     @Mock UserRepository userRepository;
+    @Mock org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     @InjectMocks ReviewServiceImpl reviewService;
 
@@ -115,6 +117,44 @@ class ReviewServiceImplTest {
 
         assertThatThrownBy(() -> reviewService.createReview(request, "alice"))
                 .isInstanceOf(DuplicateResourceException.class);
+    }
+
+    @Test
+    void updateReview_asOwner_updatesRatingAndComment() {
+        when(reviewRepository.findById(1L)).thenReturn(Optional.of(review));
+        when(reviewRepository.save(any(Review.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ReviewUpdateRequestDTO request = new ReviewUpdateRequestDTO();
+        request.setRating(4);
+        request.setComment("Buen material");
+
+        ReviewResponseDTO response = reviewService.updateReview(1L, request, "alice");
+
+        assertThat(response.getRating()).isEqualTo(4);
+        assertThat(response.getComment()).isEqualTo("Buen material");
+    }
+
+    @Test
+    void updateReview_asOtherUser_throwsForbidden() {
+        when(reviewRepository.findById(1L)).thenReturn(Optional.of(review));
+
+        ReviewUpdateRequestDTO request = new ReviewUpdateRequestDTO();
+        request.setRating(4);
+        request.setComment("Buen material");
+
+        assertThatThrownBy(() -> reviewService.updateReview(1L, request, "bob"))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void updateReview_withUnknownReview_throwsNotFound() {
+        when(reviewRepository.findById(99L)).thenReturn(Optional.empty());
+
+        ReviewUpdateRequestDTO request = new ReviewUpdateRequestDTO();
+        request.setRating(4);
+
+        assertThatThrownBy(() -> reviewService.updateReview(99L, request, "alice"))
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 
     @Test

@@ -1,16 +1,26 @@
 package com.eduquest.api.service.impl;
 
 import com.eduquest.api.dto.request.GroupRequestDTO;
+import com.eduquest.api.dto.response.GroupMemberResponseDTO;
 import com.eduquest.api.dto.response.GroupResponseDTO;
 import com.eduquest.api.dto.response.PageResponseDTO;
+import com.eduquest.api.entity.GroupVisibility;
+import com.eduquest.api.entity.GroupVisit;
 import com.eduquest.api.entity.PrivateGroup;
+import com.eduquest.api.exception.BadRequestException;
+import com.eduquest.api.exception.ForbiddenException;
 import com.eduquest.api.entity.User;
 import com.eduquest.api.exception.ResourceNotFoundException;
 import com.eduquest.api.repository.PrivateGroupRepository;
+import com.eduquest.api.repository.DocumentRepository;
+import com.eduquest.api.repository.GroupVisitRepository;
+import com.eduquest.api.repository.StudySessionRepository;
 import com.eduquest.api.repository.UserRepository;
+import com.eduquest.api.service.GroupCodeGenerator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -19,6 +29,7 @@ import org.mockito.quality.Strictness;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.List;
 import java.util.Optional;
@@ -26,6 +37,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -34,6 +46,13 @@ class GroupServiceImplTest {
 
     @Mock PrivateGroupRepository groupRepository;
     @Mock UserRepository userRepository;
+    @Mock PasswordEncoder passwordEncoder;
+    @Mock GroupCodeGenerator codeGenerator;
+    @Mock GroupVisitRepository visitRepository;
+    @Mock DocumentRepository documentRepository;
+    @Mock StudySessionRepository sessionRepository;
+    @Mock com.eduquest.api.repository.GroupMessageRepository messageRepository;
+    @Mock org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     @InjectMocks GroupServiceImpl groupService;
 
@@ -45,6 +64,8 @@ class GroupServiceImplTest {
         alice.setId(1L);
         alice.setUsername("alice");
         alice.setEmail("alice@utec.edu.pe");
+        when(codeGenerator.nextCode()).thenReturn("K7P2QX");
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(alice));
     }
 
     @Test
@@ -65,6 +86,39 @@ class GroupServiceImplTest {
         assertThat(response.getId()).isEqualTo(5L);
         assertThat(response.getName()).isEqualTo("Grupo de Calculo");
         assertThat(response.getCreatorUsername()).isEqualTo("alice");
+        assertThat(response.getCode()).isEqualTo("K7P2QX");
+        assertThat(response.getVisibility()).isEqualTo(GroupVisibility.PUBLIC);
+        assertThat(response.isMember()).isTrue();
+        assertThat(response.getMemberCount()).isEqualTo(1);
+    }
+
+    @Test
+    void createGroup_private_hashesPassword() {
+        when(passwordEncoder.encode("secreto")).thenReturn("hash");
+        when(groupRepository.save(any(PrivateGroup.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        GroupRequestDTO request = new GroupRequestDTO();
+        request.setName("Grupo cerrado");
+        request.setVisibility(GroupVisibility.PRIVATE);
+        request.setPassword("secreto");
+
+        GroupResponseDTO response = groupService.createGroup(request, "alice");
+
+        ArgumentCaptor<PrivateGroup> captor = ArgumentCaptor.forClass(PrivateGroup.class);
+        verify(groupRepository).save(captor.capture());
+        assertThat(captor.getValue().getJoinPassword()).isEqualTo("hash");
+        assertThat(response.getVisibility()).isEqualTo(GroupVisibility.PRIVATE);
+    }
+
+    @Test
+    void createGroup_privateWithoutPassword_throwsBadRequest() {
+        GroupRequestDTO request = new GroupRequestDTO();
+        request.setName("Grupo cerrado");
+        request.setVisibility(GroupVisibility.PRIVATE);
+        request.setPassword("  ");
+
+        assertThatThrownBy(() -> groupService.createGroup(request, "alice"))
+                .isInstanceOf(BadRequestException.class);
     }
 
     @Test
@@ -92,13 +146,95 @@ class GroupServiceImplTest {
         empty.setName("Vacio");
 
         Pageable pageable = PageRequest.of(0, 10);
-        when(groupRepository.findAll(pageable)).thenReturn(new PageImpl<>(List.of(withMember, empty), pageable, 2));
+        when(groupRepository.findVisibleFor(1L, GroupVisibility.PUBLIC, "%", pageable))
+                .thenReturn(new PageImpl<>(List.of(withMember, empty), pageable, 2));
 
-        PageResponseDTO<GroupResponseDTO> page = groupService.getAllGroups(pageable);
+        PageResponseDTO<GroupResponseDTO> page = groupService.getAllGroups(pageable, "alice", null);
 
         assertThat(page.content()).hasSize(2);
         assertThat(page.content().get(0).getCreatorUsername()).isEqualTo("alice");
         assertThat(page.content().get(1).getCreatorUsername()).isEqualTo("Sin miembros");
+        assertThat(page.content().get(0).isMember()).isTrue();
+        assertThat(page.content().get(1).isMember()).isFalse();
+    }
+
+    @Test
+    void getGroupById_whenExists_returnsDto() {
+        PrivateGroup group = new PrivateGroup();
+        group.setId(1L);
+        group.setName("Grupo de Calculo");
+        group.setDescription("Calculo I");
+        group.setCreator(alice);
+
+        when(groupRepository.findById(1L)).thenReturn(Optional.of(group));
+
+        GroupResponseDTO response = groupService.getGroupById(1L, "alice");
+
+        assertThat(response.getId()).isEqualTo(1L);
+        assertThat(response.getName()).isEqualTo("Grupo de Calculo");
+        assertThat(response.getCreatorUsername()).isEqualTo("alice");
+    }
+
+    @Test
+    void getGroupById_whenMissing_throwsNotFound() {
+        when(groupRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> groupService.getGroupById(99L, "alice"))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void getGroupById_privateForOutsider_isHidden() {
+        PrivateGroup group = privateGroup();
+        when(groupRepository.findById(3L)).thenReturn(Optional.of(group));
+
+        assertThatThrownBy(() -> groupService.getGroupById(3L, "alice"))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void getGroupByCode_findsPrivateGroupIgnoringCase() {
+        PrivateGroup group = privateGroup();
+        when(groupRepository.findByCodeIgnoreCase("ab12cd")).thenReturn(Optional.of(group));
+
+        GroupResponseDTO response = groupService.getGroupByCode(" ab12cd ", "alice");
+
+        assertThat(response.getCode()).isEqualTo("AB12CD");
+        assertThat(response.getVisibility()).isEqualTo(GroupVisibility.PRIVATE);
+        assertThat(response.isMember()).isFalse();
+    }
+
+    @Test
+    void getGroupByCode_whenMissing_throwsNotFound() {
+        when(groupRepository.findByCodeIgnoreCase(any())).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> groupService.getGroupByCode(null, "alice"))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void joinGroup_privateWithCorrectPassword_addsMember() {
+        PrivateGroup group = privateGroup();
+        when(groupRepository.findById(3L)).thenReturn(Optional.of(group));
+        when(passwordEncoder.matches("secreto", "hash")).thenReturn(true);
+        when(groupRepository.save(any(PrivateGroup.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        GroupResponseDTO response = groupService.joinGroup(3L, "alice", "secreto");
+
+        assertThat(response.isMember()).isTrue();
+        assertThat(response.getMemberCount()).isEqualTo(2);
+    }
+
+    @Test
+    void joinGroup_privateWithWrongPassword_throwsForbidden() {
+        PrivateGroup group = privateGroup();
+        when(groupRepository.findById(3L)).thenReturn(Optional.of(group));
+        when(passwordEncoder.matches("otra", "hash")).thenReturn(false);
+
+        assertThatThrownBy(() -> groupService.joinGroup(3L, "alice", "otra"))
+                .isInstanceOf(ForbiddenException.class);
+        assertThatThrownBy(() -> groupService.joinGroup(3L, "alice", null))
+                .isInstanceOf(ForbiddenException.class);
     }
 
     @Test
@@ -113,7 +249,7 @@ class GroupServiceImplTest {
         when(groupRepository.existsByIdAndMembersId(1L, 1L)).thenReturn(false);
         when(groupRepository.save(any(PrivateGroup.class))).thenReturn(group);
 
-        GroupResponseDTO response = groupService.joinGroup(1L, "alice");
+        GroupResponseDTO response = groupService.joinGroup(1L, "alice", null);
 
         assertThat(response.getId()).isEqualTo(1L);
         assertThat(response.getCreatorUsername()).isEqualTo("alice");
@@ -128,7 +264,254 @@ class GroupServiceImplTest {
         when(groupRepository.findById(1L)).thenReturn(Optional.of(group));
         when(groupRepository.existsByIdAndMembersId(1L, 1L)).thenReturn(true);
 
-        assertThatThrownBy(() -> groupService.joinGroup(1L, "alice"))
+        assertThatThrownBy(() -> groupService.joinGroup(1L, "alice", null))
                 .isInstanceOf(com.eduquest.api.exception.DuplicateResourceException.class);
+    }
+
+    @Test
+    void getMembers_asMember_returnsCreatorFirstWithAvatar() {
+        User bob = new User();
+        bob.setId(2L);
+        bob.setUsername("bob");
+        bob.setAvatarVersion(99L);
+
+        PrivateGroup group = new PrivateGroup();
+        group.setId(1L);
+        group.setCreator(alice);
+        group.getMembers().add(bob);
+        group.getMembers().add(alice);
+
+        when(userRepository.findByUsername("bob")).thenReturn(Optional.of(bob));
+        when(groupRepository.findById(1L)).thenReturn(Optional.of(group));
+        when(groupRepository.existsByIdAndMembersId(1L, 2L)).thenReturn(true);
+
+        List<GroupMemberResponseDTO> members = groupService.getMembers(1L, "bob");
+
+        assertThat(members).extracting(GroupMemberResponseDTO::getUsername).containsExactly("alice", "bob");
+        assertThat(members.get(0).getGroupRole()).isEqualTo("CREATOR");
+        assertThat(members.get(1).getGroupRole()).isEqualTo("MEMBER");
+        assertThat(members.get(1).getAvatarUrl()).isEqualTo("/api/v1/users/2/avatar?v=99");
+    }
+
+    @Test
+    void getMembers_notMember_throwsForbidden() {
+        PrivateGroup group = new PrivateGroup();
+        group.setId(1L);
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(alice));
+        when(groupRepository.findById(1L)).thenReturn(Optional.of(group));
+        when(groupRepository.existsByIdAndMembersId(1L, 1L)).thenReturn(false);
+
+        assertThatThrownBy(() -> groupService.getMembers(1L, "alice"))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void getMembers_unknownGroup_throwsNotFound() {
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(alice));
+        when(groupRepository.findById(9L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> groupService.getMembers(9L, "alice"))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    private PrivateGroup privateGroup() {
+        User bob = new User();
+        bob.setId(2L);
+        bob.setUsername("bob");
+
+        PrivateGroup group = new PrivateGroup();
+        group.setId(3L);
+        group.setName("Grupo cerrado");
+        group.setCode("AB12CD");
+        group.setVisibility(GroupVisibility.PRIVATE);
+        group.setJoinPassword("hash");
+        group.setCreator(bob);
+        group.getMembers().add(bob);
+        return group;
+    }
+
+    @Test
+    void getAllGroups_withSearch_buildsEscapedPattern() {
+        Pageable pageable = PageRequest.of(0, 10);
+        when(groupRepository.findVisibleFor(1L, GroupVisibility.PUBLIC, "%calc\\_100%", pageable))
+                .thenReturn(new PageImpl<>(List.of(), pageable, 0));
+
+        PageResponseDTO<GroupResponseDTO> page = groupService.getAllGroups(pageable, "alice", "  Calc_100 ");
+
+        assertThat(page.content()).isEmpty();
+        verify(groupRepository).findVisibleFor(1L, GroupVisibility.PUBLIC, "%calc\\_100%", pageable);
+    }
+
+    @Test
+    void getMyGroups_countsUnreadAndSortsByActivity() {
+        PrivateGroup older = new PrivateGroup();
+        older.setId(1L);
+        older.setName("Antiguo");
+        older.setCreator(alice);
+        older.getMembers().add(alice);
+        older.setLastActivityAt(java.time.LocalDateTime.now().minusDays(2));
+
+        PrivateGroup recent = new PrivateGroup();
+        recent.setId(2L);
+        recent.setName("Reciente");
+        recent.setCreator(alice);
+        recent.getMembers().add(alice);
+        recent.setLastActivityAt(java.time.LocalDateTime.now());
+
+        PrivateGroup legacy = new PrivateGroup();
+        legacy.setId(3L);
+        legacy.setName("Sin actividad");
+        legacy.getMembers().add(alice);
+
+        java.time.LocalDateTime seen = java.time.LocalDateTime.now().minusDays(1);
+        when(groupRepository.findByMembersId(1L)).thenReturn(List.of(older, recent, legacy));
+        when(visitRepository.findByUserId(1L)).thenReturn(List.of(
+                new GroupVisit(alice, older, seen), new GroupVisit(alice, recent, seen)));
+        when(documentRepository.countByGroupIdAndUploadedAtAfterAndAuthorIdNot(2L, seen, 1L)).thenReturn(2L);
+        when(sessionRepository.countByPrivateGroupIdAndCreatedAtAfterAndCreatedByIdNot(2L, seen, 1L)).thenReturn(1L);
+        when(messageRepository.countByGroupIdAndCreatedAtAfterAndAuthorIdNot(2L, seen, 1L)).thenReturn(4L);
+
+        List<GroupResponseDTO> mine = groupService.getMyGroups("alice");
+
+        assertThat(mine).extracting(GroupResponseDTO::getName).containsExactly("Reciente", "Antiguo", "Sin actividad");
+        assertThat(mine.get(0).getUnreadCount()).isEqualTo(3);
+        assertThat(mine.get(0).getUnreadDocuments()).isEqualTo(2);
+        assertThat(mine.get(0).getUnreadMessages()).isEqualTo(4);
+        assertThat(mine.get(1).getUnreadCount()).isZero();
+        assertThat(mine.get(2).getUnreadCount()).isZero();
+    }
+
+    @Test
+    void markAsSeen_asMember_updatesVisit() {
+        PrivateGroup group = privateGroup();
+        GroupVisit visit = new GroupVisit(alice, group, java.time.LocalDateTime.now().minusDays(3));
+        when(groupRepository.findById(3L)).thenReturn(Optional.of(group));
+        when(groupRepository.existsByIdAndMembersId(3L, 1L)).thenReturn(true);
+        when(visitRepository.findByUserIdAndGroupId(1L, 3L)).thenReturn(Optional.of(visit));
+
+        groupService.markAsSeen(3L, "alice");
+
+        assertThat(visit.getLastSeenAt()).isAfter(java.time.LocalDateTime.now().minusMinutes(1));
+        verify(visitRepository).save(visit);
+    }
+
+    @Test
+    void markAsSeen_asOutsider_throwsForbidden() {
+        when(groupRepository.findById(3L)).thenReturn(Optional.of(privateGroup()));
+        when(groupRepository.existsByIdAndMembersId(3L, 1L)).thenReturn(false);
+
+        assertThatThrownBy(() -> groupService.markAsSeen(3L, "alice"))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void joinGroup_createsVisitForNewMember() {
+        PrivateGroup group = new PrivateGroup();
+        group.setId(1L);
+        group.setName("Publico");
+        when(groupRepository.findById(1L)).thenReturn(Optional.of(group));
+        when(groupRepository.existsByIdAndMembersId(1L, 1L)).thenReturn(false);
+        when(groupRepository.save(any(PrivateGroup.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(visitRepository.findByUserIdAndGroupId(1L, 1L)).thenReturn(Optional.empty());
+
+        groupService.joinGroup(1L, "alice", null);
+
+        verify(visitRepository).save(any(GroupVisit.class));
+    }
+
+    private PrivateGroup ownedPrivateGroup() {
+        PrivateGroup group = privateGroup();
+        group.setCreator(alice);
+        return group;
+    }
+
+    @Test
+    void createInvite_byOwner_createsTokenValidForSevenDays() {
+        PrivateGroup group = ownedPrivateGroup();
+        when(groupRepository.findById(3L)).thenReturn(Optional.of(group));
+        when(codeGenerator.nextInviteToken()).thenReturn("tok-1", "tok-2");
+
+        com.eduquest.api.dto.response.GroupInviteResponseDTO first = groupService.createInvite(3L, "alice", false);
+        com.eduquest.api.dto.response.GroupInviteResponseDTO reused = groupService.createInvite(3L, "alice", false);
+        com.eduquest.api.dto.response.GroupInviteResponseDTO renewed = groupService.createInvite(3L, "alice", true);
+
+        assertThat(first.token()).isEqualTo("tok-1");
+        assertThat(first.code()).isEqualTo("AB12CD");
+        assertThat(first.expiresAt()).isAfter(java.time.LocalDateTime.now().plusDays(6));
+        assertThat(reused.token()).isEqualTo("tok-1");
+        assertThat(renewed.token()).isEqualTo("tok-2");
+    }
+
+    @Test
+    void createInvite_byNonOwner_throwsForbidden() {
+        when(groupRepository.findById(3L)).thenReturn(Optional.of(privateGroup()));
+
+        assertThatThrownBy(() -> groupService.createInvite(3L, "alice", false))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void joinGroup_privateWithValidInvite_skipsPassword() {
+        PrivateGroup group = privateGroup();
+        group.setInviteToken("tok");
+        group.setInviteExpiresAt(java.time.LocalDateTime.now().plusDays(1));
+        when(groupRepository.findById(3L)).thenReturn(Optional.of(group));
+        when(groupRepository.save(any(PrivateGroup.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        assertThat(groupService.joinGroup(3L, "alice", null, "tok").isMember()).isTrue();
+    }
+
+    @Test
+    void joinGroup_privateWithExpiredInvite_throwsForbidden() {
+        PrivateGroup group = privateGroup();
+        group.setInviteToken("tok");
+        group.setInviteExpiresAt(java.time.LocalDateTime.now().minusMinutes(1));
+        when(groupRepository.findById(3L)).thenReturn(Optional.of(group));
+
+        assertThatThrownBy(() -> groupService.joinGroup(3L, "alice", null, "tok"))
+                .isInstanceOf(ForbiddenException.class)
+                .hasMessageContaining("invitación");
+        assertThatThrownBy(() -> groupService.joinGroup(3L, "alice", null, "otro"))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void changePassword_byOwner_encodesNewPassword() {
+        PrivateGroup group = ownedPrivateGroup();
+        when(groupRepository.findById(3L)).thenReturn(Optional.of(group));
+        when(passwordEncoder.encode("nueva123")).thenReturn("hash-nuevo");
+
+        groupService.changePassword(3L, "nueva123", "alice");
+
+        assertThat(group.getJoinPassword()).isEqualTo("hash-nuevo");
+    }
+
+    @Test
+    void changePassword_onPublicGroupOrMissing_fails() {
+        PrivateGroup group = ownedPrivateGroup();
+        group.setVisibility(GroupVisibility.PUBLIC);
+        when(groupRepository.findById(3L)).thenReturn(Optional.of(group));
+        when(groupRepository.findById(9L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> groupService.changePassword(3L, "nueva123", "alice"))
+                .isInstanceOf(com.eduquest.api.exception.InvalidOperationException.class);
+        assertThatThrownBy(() -> groupService.changePassword(9L, "nueva123", "alice"))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void joinGroup_publishesMemberJoinedEvent() {
+        PrivateGroup group = privateGroup();
+        when(groupRepository.findById(3L)).thenReturn(Optional.of(group));
+        when(passwordEncoder.matches("secreto", "hash")).thenReturn(true);
+        when(groupRepository.save(any(PrivateGroup.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        groupService.joinGroup(3L, "alice", "secreto");
+
+        ArgumentCaptor<com.eduquest.api.event.OnGroupActivityEvent> captor =
+                ArgumentCaptor.forClass(com.eduquest.api.event.OnGroupActivityEvent.class);
+        org.mockito.Mockito.verify(eventPublisher).publishEvent(captor.capture());
+        assertThat(captor.getValue().getType()).isEqualTo(com.eduquest.api.entity.NotificationType.GROUP_MEMBER);
+        assertThat(captor.getValue().getActorId()).isEqualTo(1L);
     }
 }

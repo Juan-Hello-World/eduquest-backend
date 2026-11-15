@@ -1,25 +1,27 @@
 package com.eduquest.api.service.impl;
 
 import com.eduquest.api.dto.request.ReviewRequestDTO;
+import com.eduquest.api.dto.request.ReviewUpdateRequestDTO;
 import com.eduquest.api.dto.response.PageResponseDTO;
 import com.eduquest.api.dto.response.ReviewResponseDTO;
 import com.eduquest.api.entity.Document;
 import com.eduquest.api.entity.Review;
 import com.eduquest.api.entity.RoleName;
 import com.eduquest.api.entity.User;
+import com.eduquest.api.event.OnUserActivityEvent;
 import com.eduquest.api.exception.DuplicateResourceException;
 import com.eduquest.api.exception.ForbiddenException;
 import com.eduquest.api.exception.ResourceNotFoundException;
 import com.eduquest.api.repository.DocumentRepository;
+import com.eduquest.api.repository.PrivateGroupRepository;
 import com.eduquest.api.repository.ReviewRepository;
 import com.eduquest.api.repository.UserRepository;
 import com.eduquest.api.service.ReviewService;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import com.eduquest.api.exception.ForbiddenException;
-import com.eduquest.api.repository.PrivateGroupRepository;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -31,15 +33,18 @@ public class ReviewServiceImpl implements ReviewService {
     private final DocumentRepository documentRepository;
     private final UserRepository userRepository;
     private final PrivateGroupRepository groupRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     public ReviewServiceImpl(ReviewRepository reviewRepository,
                              DocumentRepository documentRepository,
                              UserRepository userRepository,
-                             PrivateGroupRepository groupRepository) {
+                             PrivateGroupRepository groupRepository,
+                             ApplicationEventPublisher eventPublisher) {
         this.reviewRepository = reviewRepository;
         this.documentRepository = documentRepository;
         this.userRepository = userRepository;
         this.groupRepository = groupRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -65,6 +70,23 @@ public class ReviewServiceImpl implements ReviewService {
         review.setComment(request.getComment());
         review.setAuthor(author);
         review.setDocument(document);
+
+        Review saved = reviewRepository.save(review);
+        eventPublisher.publishEvent(new OnUserActivityEvent(this, author.getId()));
+        return mapToResponseDTO(saved);
+    }
+
+    @Override
+    @Transactional
+    public ReviewResponseDTO updateReview(Long id, ReviewUpdateRequestDTO request, String username) {
+        Review review = findReview(id);
+
+        if (!review.getAuthor().getUsername().equals(username)) {
+            throw new ForbiddenException("No puedes editar una reseña que no te pertenece");
+        }
+
+        review.setRating(request.getRating());
+        review.setComment(request.getComment());
 
         return mapToResponseDTO(reviewRepository.save(review));
     }

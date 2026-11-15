@@ -1,5 +1,6 @@
 package com.eduquest.api.dto.request;
 
+import com.eduquest.api.entity.GroupVisibility;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
@@ -14,4 +15,9 @@ public class GroupRequestDTO {
     private String name;
 
     private String description;
+
+    private GroupVisibility visibility;
+
+    @Size(min = 4, max = 50, message = "La contraseña del grupo debe tener entre 4 y 50 caracteres")
+    private String password;
 }

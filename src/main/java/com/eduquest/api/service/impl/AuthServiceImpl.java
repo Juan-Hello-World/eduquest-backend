@@ -11,6 +11,7 @@ import com.eduquest.api.exception.DuplicateResourceException;
 import com.eduquest.api.exception.InvalidCredentialsException;
 import com.eduquest.api.exception.ResourceNotFoundException;
 import com.eduquest.api.exception.UnauthorizedException;
+import com.eduquest.api.exception.UserBannedException;
 import com.eduquest.api.repository.RoleRepository;
 import com.eduquest.api.repository.UserRepository;
 import com.eduquest.api.security.JwtService;
@@ -58,6 +59,12 @@ public class AuthServiceImpl implements AuthService {
                 principal.getUsername(), principal.getEmail(), roles);
     }
 
+    private void ensureNotBanned(User user) {
+        if (user.isBanned()) {
+            throw new UserBannedException(user.getBanReason(), user.getBannedAt());
+        }
+    }
+
     private Set<String> extractRoleNames(User user) {
         return user.getRoles().stream()
                 .map(role -> role.getName().name())
@@ -75,11 +82,12 @@ public class AuthServiceImpl implements AuthService {
             throw new InvalidCredentialsException("Usuario o contraseña incorrectos");
         }
 
-        SecurityContextHolder.getContext().setAuthentication(authentication);
-
         UserPrincipal principal = (UserPrincipal) authentication.getPrincipal();
         User user = userRepository.findByUsername(principal.getUsername())
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado"));
+        ensureNotBanned(user);
+
+        SecurityContextHolder.getContext().setAuthentication(authentication);
 
         return buildAuthResponse(principal, extractRoleNames(user));
     }
@@ -87,6 +95,9 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public AuthResponseDTO registerUser(RegisterRequestDTO registerRequest) {
+        userRepository.findByEmail(registerRequest.getEmail()).ifPresent(this::ensureNotBanned);
+        userRepository.findByUsername(registerRequest.getUsername()).ifPresent(this::ensureNotBanned);
+
         if (userRepository.existsByUsername(registerRequest.getUsername())) {
             throw new DuplicateResourceException("El nombre de usuario ya está en uso");
         }
@@ -99,6 +110,7 @@ public class AuthServiceImpl implements AuthService {
         user.setUsername(registerRequest.getUsername());
         user.setEmail(registerRequest.getEmail());
         user.setPassword(passwordEncoder.encode(registerRequest.getPassword()));
+        user.setAdvisor(Boolean.TRUE.equals(registerRequest.getAdvisor()));
 
         Role userRole = roleRepository.findByName(RoleName.ROLE_USER)
                 .orElseThrow(() -> new ResourceNotFoundException("Rol de usuario no establecido en la base de datos"));
@@ -126,6 +138,7 @@ public class AuthServiceImpl implements AuthService {
         String username = jwtService.extractUsername(refreshToken);
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new UnauthorizedException("Usuario no encontrado"));
+        ensureNotBanned(user);
 
         AuthResponseDTO response = buildAuthResponse(UserPrincipal.build(user), extractRoleNames(user));
         response.setRefreshToken(refreshToken);

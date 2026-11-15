@@ -13,4 +13,17 @@ public class StudySessionResponseDTO {
     private LocalDateTime scheduledAt;
     private String meetingUrl;
     private String groupName;
+    private String createdByUsername;
+    private boolean canManage;
+    private boolean createdByAdvisor;
+    private boolean finished;
+    private int attendeeCount;
+    private boolean attending;
+    private Double averageRating;
+    private int reviewCount;
+    private boolean reviewedByMe;
+    private boolean canReview;
+    private String recordingUrl;
+    private String recordingTitle;
+    private String recordingVideoId;
 }

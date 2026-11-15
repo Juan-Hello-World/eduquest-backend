@@ -1,7 +1,6 @@
 package com.eduquest.api.entity;
 
 import jakarta.persistence.*;
-import jakarta.validation.constraints.Future;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -11,6 +10,8 @@ import lombok.Setter;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "study_sessions")
@@ -33,7 +34,6 @@ public class StudySession {
     private String description;
 
     @NotNull
-    @Future
     @Column(nullable = false)
     private LocalDateTime scheduledAt;
 
@@ -42,4 +42,27 @@ public class StudySession {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "group_id", nullable = false)
     private PrivateGroup privateGroup;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "created_by_id")
+    private User createdBy;
+
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
+
+    @Column(name = "recording_url")
+    private String recordingUrl;
+
+    @Column(name = "recording_title")
+    private String recordingTitle;
+
+    @OneToMany(mappedBy = "session", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<SessionAttendance> attendances = new ArrayList<>();
+
+    @OneToMany(mappedBy = "session", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<SessionReview> reviews = new ArrayList<>();
+
+    public boolean isFinished() {
+        return scheduledAt != null && scheduledAt.isBefore(LocalDateTime.now());
+    }
 }

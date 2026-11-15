@@ -27,6 +27,7 @@ import static org.mockito.Mockito.when;
 class AuthControllerTest {
 
     @Mock AuthService authService;
+    @Mock com.eduquest.api.service.PasswordResetService passwordResetService;
 
     @InjectMocks AuthController authController;
 
@@ -75,5 +76,22 @@ class AuthControllerTest {
 
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(result.getBody().getRefreshToken()).isEqualTo("refresh");
+    }
+
+    @Test
+    void forgotAndResetPassword_delegateToService() {
+        com.eduquest.api.dto.request.ForgotPasswordRequestDTO forgot = new com.eduquest.api.dto.request.ForgotPasswordRequestDTO();
+        forgot.setEmail("alice@utec.edu.pe");
+        com.eduquest.api.dto.request.ResetPasswordRequestDTO reset = new com.eduquest.api.dto.request.ResetPasswordRequestDTO();
+        reset.setEmail("alice@utec.edu.pe");
+        reset.setCode("123456");
+        reset.setPassword("nueva123");
+
+        assertThat(authController.forgotPassword(forgot).getStatusCode())
+                .isEqualTo(org.springframework.http.HttpStatus.ACCEPTED);
+        assertThat(authController.resetPassword(reset).getStatusCode())
+                .isEqualTo(org.springframework.http.HttpStatus.NO_CONTENT);
+        org.mockito.Mockito.verify(passwordResetService).requestReset("alice@utec.edu.pe");
+        org.mockito.Mockito.verify(passwordResetService).resetPassword("alice@utec.edu.pe", "123456", "nueva123");
     }
 }

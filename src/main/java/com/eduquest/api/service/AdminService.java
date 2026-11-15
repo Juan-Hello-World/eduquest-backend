@@ -8,4 +8,6 @@ public interface AdminService {
     PageResponseDTO<UserResponseDTO> getAllUsers(Pageable pageable);
     UserResponseDTO getUserById(Long id);
     UserResponseDTO updateUserRole(Long id, String roleName);
+    UserResponseDTO banUser(Long id, String reason, String adminUsername);
+    UserResponseDTO unbanUser(Long id);
 }

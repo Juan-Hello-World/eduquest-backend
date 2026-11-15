@@ -81,4 +81,35 @@ class AdminUserControllerTest {
 
         assertThat(true).isTrue();
     }
+
+    @Test
+    void banUser_returnsOk() {
+        UserResponseDTO dto = new UserResponseDTO();
+        dto.setId(2L);
+        dto.setBanned(true);
+        org.springframework.security.core.Authentication authentication =
+                org.mockito.Mockito.mock(org.springframework.security.core.Authentication.class);
+        when(authentication.getName()).thenReturn("admin");
+        when(adminService.banUser(2L, "Incumplió las normas", "admin")).thenReturn(dto);
+
+        com.eduquest.api.dto.request.BanUserRequestDTO request = new com.eduquest.api.dto.request.BanUserRequestDTO();
+        request.setReason("Incumplió las normas");
+
+        ResponseEntity<UserResponseDTO> result = adminUserController.banUser(2L, request, authentication);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(result.getBody().isBanned()).isTrue();
+    }
+
+    @Test
+    void unbanUser_returnsOk() {
+        UserResponseDTO dto = new UserResponseDTO();
+        dto.setId(2L);
+        when(adminService.unbanUser(2L)).thenReturn(dto);
+
+        ResponseEntity<UserResponseDTO> result = adminUserController.unbanUser(2L);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(result.getBody().isBanned()).isFalse();
+    }
 }

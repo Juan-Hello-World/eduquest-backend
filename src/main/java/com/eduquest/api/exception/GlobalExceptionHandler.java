@@ -12,6 +12,8 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 import java.net.URI;
 import java.time.LocalDateTime;
@@ -64,6 +66,15 @@ public class GlobalExceptionHandler {
         return buildProblemDetail(HttpStatus.UNAUTHORIZED, ex.getMessage(), request);
     }
 
+    @ExceptionHandler(UserBannedException.class)
+    public ProblemDetail handleUserBanned(UserBannedException ex, HttpServletRequest request) {
+        ProblemDetail problemDetail = buildProblemDetail(HttpStatus.FORBIDDEN, ex.getMessage(), request);
+        problemDetail.setProperty("code", UserBannedException.CODE);
+        problemDetail.setProperty("banReason", ex.getReason());
+        problemDetail.setProperty("bannedAt", ex.getBannedAt() != null ? ex.getBannedAt().toString() : null);
+        return problemDetail;
+    }
+
     @ExceptionHandler(ForbiddenException.class)
     public ProblemDetail handleForbidden(ForbiddenException ex, HttpServletRequest request) {
         return buildProblemDetail(HttpStatus.FORBIDDEN, ex.getMessage(), request);
@@ -71,7 +82,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ExternalServiceException.class)
     public ProblemDetail handleExternalService(ExternalServiceException ex, HttpServletRequest request) {
-        return buildProblemDetail(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage(), request);
+        return buildProblemDetail(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), request);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -85,6 +96,16 @@ public class GlobalExceptionHandler {
         problemDetail.setTitle("Validation Error");
         problemDetail.setProperty("errors", errors);
         return problemDetail;
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ProblemDetail handleMaxUploadSize(MaxUploadSizeExceededException ex, HttpServletRequest request) {
+        return buildProblemDetail(HttpStatus.BAD_REQUEST, "La imagen no debe superar los 2 MB", request);
+    }
+
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ProblemDetail handleMissingPart(MissingServletRequestPartException ex, HttpServletRequest request) {
+        return buildProblemDetail(HttpStatus.BAD_REQUEST, "Falta el archivo de la imagen", request);
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)

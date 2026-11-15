@@ -1,14 +1,17 @@
 package com.eduquest.api.controller;
 
+import com.eduquest.api.dto.request.BanUserRequestDTO;
 import com.eduquest.api.dto.response.PageResponseDTO;
 import com.eduquest.api.dto.response.UserResponseDTO;
 import com.eduquest.api.service.AdminService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -43,5 +46,22 @@ public class AdminUserController {
     @PatchMapping("/{id}/role")
     public ResponseEntity<UserResponseDTO> updateUserRole(@PathVariable Long id, @RequestParam String role) {
         return ResponseEntity.ok(adminService.updateUserRole(id, role));
+    }
+
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @Operation(summary = "Vetar usuario", description = "Solo ADMIN. Bloquea el acceso del usuario por incumplir las normas; el motivo se le muestra al intentar entrar.")
+    @PatchMapping("/{id}/ban")
+    public ResponseEntity<UserResponseDTO> banUser(
+            @PathVariable Long id,
+            @Valid @RequestBody BanUserRequestDTO request,
+            Authentication authentication) {
+        return ResponseEntity.ok(adminService.banUser(id, request.getReason(), authentication.getName()));
+    }
+
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    @Operation(summary = "Quitar veto", description = "Solo ADMIN. Devuelve el acceso a un usuario vetado.")
+    @PatchMapping("/{id}/unban")
+    public ResponseEntity<UserResponseDTO> unbanUser(@PathVariable Long id) {
+        return ResponseEntity.ok(adminService.unbanUser(id));
     }
 }

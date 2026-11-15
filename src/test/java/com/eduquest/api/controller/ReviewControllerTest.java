@@ -1,6 +1,7 @@
 package com.eduquest.api.controller;
 
 import com.eduquest.api.dto.request.ReviewRequestDTO;
+import com.eduquest.api.dto.request.ReviewUpdateRequestDTO;
 import com.eduquest.api.dto.response.PageResponseDTO;
 import com.eduquest.api.dto.response.ReviewResponseDTO;
 import com.eduquest.api.security.UserPrincipal;
@@ -63,6 +64,20 @@ class ReviewControllerTest {
 
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(result.getBody().getComment()).isEqualTo("Excelente");
+    }
+
+    @Test
+    void updateReview_returnsOk() {
+        when(reviewService.updateReview(anyLong(), any(), anyString())).thenReturn(response());
+
+        ReviewUpdateRequestDTO request = new ReviewUpdateRequestDTO();
+        request.setRating(4);
+        request.setComment("Buen material");
+
+        ResponseEntity<ReviewResponseDTO> result = reviewController.updateReview(1L, request, principal());
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+        verify(reviewService).updateReview(1L, request, "alice");
     }
 
     @Test

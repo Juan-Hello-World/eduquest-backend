@@ -13,6 +13,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Optional;
 import java.util.Set;
@@ -42,9 +43,10 @@ class RoleInitializerTest {
         when(roleRepository.findByName(RoleName.ROLE_ADMIN)).thenReturn(Optional.of(adminRole));
         when(roleRepository.findByName(RoleName.ROLE_MANAGER)).thenReturn(Optional.empty());
         when(roleRepository.save(any(Role.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(userRepository.existsByUsername("admin")).thenReturn(false);
+        when(userRepository.findByUsername("admin")).thenReturn(Optional.empty());
         when(passwordEncoder.encode("admin123")).thenReturn("encoded");
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        ReflectionTestUtils.setField(roleInitializer, "adminInitialPassword", "admin123");
 
         roleInitializer.run("non-blank-arg");
 
@@ -60,7 +62,8 @@ class RoleInitializerTest {
         when(roleRepository.findByName(RoleName.ROLE_USER)).thenReturn(Optional.of(userRole));
         when(roleRepository.findByName(RoleName.ROLE_ADMIN)).thenReturn(Optional.of(adminRole));
         when(roleRepository.findByName(RoleName.ROLE_MANAGER)).thenReturn(Optional.of(managerRole));
-        when(userRepository.existsByUsername("admin")).thenReturn(true);
+        when(userRepository.findByUsername("admin")).thenReturn(Optional.of(new User()));
+        ReflectionTestUtils.setField(roleInitializer, "adminInitialPassword", "admin123");
 
         roleInitializer.run("non-blank-arg");
 

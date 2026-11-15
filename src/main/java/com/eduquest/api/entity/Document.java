@@ -36,6 +36,14 @@ public class Document {
     @Column(nullable = false)
     private String fileUrl;
 
+    @Size(max = 100)
+    @Column(length = 100)
+    private String course;
+
+    @Size(max = 100)
+    @Column(length = 100)
+    private String university;
+
     @Column(nullable = false)
     private LocalDateTime uploadedAt = LocalDateTime.now();
 

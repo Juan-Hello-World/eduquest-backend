@@ -64,4 +64,22 @@ class StudyPlanControllerTest {
 
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
     }
+
+    @Test
+    void updateProgress_returnsOk() {
+        org.springframework.security.core.Authentication authentication =
+                org.mockito.Mockito.mock(org.springframework.security.core.Authentication.class);
+        org.mockito.Mockito.when(authentication.getName()).thenReturn("alice");
+        StudyPlanResponseDTO dto = new StudyPlanResponseDTO();
+        dto.setId(3L);
+        org.mockito.Mockito.when(studyPlanService.updateProgress(
+                org.mockito.ArgumentMatchers.eq(3L), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq("alice")))
+                .thenReturn(dto);
+
+        com.eduquest.api.dto.request.StudyPlanProgressRequestDTO request =
+                new com.eduquest.api.dto.request.StudyPlanProgressRequestDTO();
+        request.setCompletedSteps(java.util.Set.of(0));
+
+        assertThat(studyPlanController.updateProgress(3L, request, authentication).getBody().getId()).isEqualTo(3L);
+    }
 }

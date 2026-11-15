@@ -53,4 +53,12 @@ class EmailServiceImplTest {
         verify(mailSender).createMimeMessage();
         verify(mailSender).send(any(MimeMessage.class));
     }
+
+    @Test
+    void sendPasswordResetCode_rendersTemplateAndSendsMessage() {
+        emailService.sendPasswordResetCode("alice@utec.edu.pe", "alice", "123456", "https://eduquest.app/reset-password");
+
+        verify(mailSender).createMimeMessage();
+        verify(mailSender).send(any(MimeMessage.class));
+    }
 }

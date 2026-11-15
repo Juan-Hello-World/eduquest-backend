@@ -1,5 +1,6 @@
 package com.eduquest.api.controller;
 
+import com.eduquest.api.dto.request.StudyPlanProgressRequestDTO;
 import com.eduquest.api.dto.request.StudyPlanRequestDTO;
 import com.eduquest.api.dto.response.StudyPlanResponseDTO;
 import com.eduquest.api.service.StudyPlanService;
@@ -15,7 +16,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/study-plans")
-@Tag(name = "Planes de estudio (IA)", description = "Generación de planes de estudio con OpenAI. Requiere OPENAI_API_KEY configurada.")
+@Tag(name = "Planes de estudio", description = "Generación de planes de estudio personalizados por curso y dificultad.")
 public class StudyPlanController {
 
     private final StudyPlanService studyPlanService;
@@ -26,12 +27,11 @@ public class StudyPlanController {
 
     @PostMapping("/generate")
     @PreAuthorize("hasAuthority('ROLE_USER') or hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_MANAGER')")
-    @Operation(summary = "Generar plan de estudio con IA", description = "Devuelve un plan estructurado generado con OpenAI para el curso, duración y dificultad indicados.")
+    @Operation(summary = "Generar plan de estudio", description = "Devuelve un plan estructurado para un curso (courseName y difficulty) o para todo el ciclo (courses: lista de cursos con su dificultad, hasta 8).")
     public ResponseEntity<StudyPlanResponseDTO> generatePlan(
             @Valid @RequestBody StudyPlanRequestDTO request,
             Authentication authentication) {
 
-        // Obtenemos el username del token JWT automáticamente inyectado por Spring Security
         String username = authentication.getName();
 
         StudyPlanResponseDTO response = studyPlanService.generateStudyPlan(request, username);
@@ -44,5 +44,15 @@ public class StudyPlanController {
     public ResponseEntity<List<StudyPlanResponseDTO>> getMyPlans(Authentication authentication) {
         String username = authentication.getName();
         return ResponseEntity.ok(studyPlanService.getMyStudyPlans(username));
+    }
+
+    @PutMapping("/{planId}/progress")
+    @PreAuthorize("hasAuthority('ROLE_USER') or hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_MANAGER')")
+    @Operation(summary = "Guardar progreso del plan", description = "Recibe los índices (desde 0) de los pasos marcados como hechos. 404 si el plan no es del usuario.")
+    public ResponseEntity<StudyPlanResponseDTO> updateProgress(
+            @PathVariable Long planId,
+            @Valid @RequestBody StudyPlanProgressRequestDTO request,
+            Authentication authentication) {
+        return ResponseEntity.ok(studyPlanService.updateProgress(planId, request, authentication.getName()));
     }
 }

@@ -38,6 +38,12 @@ public class EmailServiceImpl implements EmailService {
                 "email/document-uploaded", Map.of("documentTitle", documentTitle));
     }
 
+    @Override
+    public void sendPasswordResetCode(String to, String username, String code, String resetLink) {
+        sendHtmlEmail(to, "EduQuest: tu código para cambiar la contraseña",
+                "email/password-reset", Map.of("username", username, "code", code, "resetLink", resetLink));
+    }
+
     private String renderTemplate(String template, Map<String, Object> variables) {
         Context context = new Context();
         context.setVariables(variables);

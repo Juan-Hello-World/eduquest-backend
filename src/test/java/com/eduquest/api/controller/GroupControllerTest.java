@@ -2,7 +2,9 @@ package com.eduquest.api.controller;
 
 import com.eduquest.api.dto.request.DocumentRequestDTO;
 import com.eduquest.api.dto.request.GroupRequestDTO;
+import com.eduquest.api.dto.request.JoinGroupRequestDTO;
 import com.eduquest.api.dto.response.DocumentResponseDTO;
+import com.eduquest.api.dto.response.GroupMemberResponseDTO;
 import com.eduquest.api.dto.response.GroupResponseDTO;
 import com.eduquest.api.dto.response.PageResponseDTO;
 import com.eduquest.api.service.DocumentService;
@@ -25,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -66,12 +69,38 @@ class GroupControllerTest {
     void getAllGroups_returnsPaginatedResponse() {
         PageResponseDTO<GroupResponseDTO> page =
                 new PageResponseDTO<>(List.of(response()), 0, 10, 1, 1);
-        when(groupService.getAllGroups(any())).thenReturn(page);
+        Authentication authentication = mock(Authentication.class);
+        when(authentication.getName()).thenReturn("alice");
+        when(groupService.getAllGroups(any(), anyString(), any())).thenReturn(page);
 
-        ResponseEntity<PageResponseDTO<GroupResponseDTO>> result = groupController.getAllGroups(0, 10);
+        ResponseEntity<PageResponseDTO<GroupResponseDTO>> result = groupController.getAllGroups(0, 10, "calc", authentication);
 
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(result.getBody().content()).hasSize(1);
+    }
+
+    @Test
+    void getGroupById_returnsOk() {
+        Authentication authentication = mock(Authentication.class);
+        when(authentication.getName()).thenReturn("alice");
+        when(groupService.getGroupById(1L, "alice")).thenReturn(response());
+
+        ResponseEntity<GroupResponseDTO> result = groupController.getGroupById(1L, authentication);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(result.getBody().getName()).isEqualTo("Grupo de Calculo");
+    }
+
+    @Test
+    void getGroupByCode_returnsOk() {
+        Authentication authentication = mock(Authentication.class);
+        when(authentication.getName()).thenReturn("alice");
+        when(groupService.getGroupByCode("AB12CD", "alice")).thenReturn(response());
+
+        ResponseEntity<GroupResponseDTO> result = groupController.getGroupByCode("AB12CD", authentication);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(result.getBody().getId()).isEqualTo(1L);
     }
 
     @Test
@@ -101,12 +130,26 @@ class GroupControllerTest {
     void joinGroup_returnsOk() {
         Authentication authentication = mock(Authentication.class);
         when(authentication.getName()).thenReturn("alice");
-        when(groupService.joinGroup(anyLong(), anyString())).thenReturn(response());
+        when(groupService.joinGroup(anyLong(), anyString(), isNull(), isNull())).thenReturn(response());
 
-        ResponseEntity<GroupResponseDTO> result = groupController.joinGroup(1L, authentication);
+        ResponseEntity<GroupResponseDTO> result = groupController.joinGroup(1L, null, authentication);
 
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(result.getBody().getName()).isEqualTo("Grupo de Calculo");
+    }
+
+    @Test
+    void joinGroup_withPassword_forwardsIt() {
+        Authentication authentication = mock(Authentication.class);
+        when(authentication.getName()).thenReturn("alice");
+        when(groupService.joinGroup(1L, "alice", "secreto", null)).thenReturn(response());
+
+        JoinGroupRequestDTO request = new JoinGroupRequestDTO();
+        request.setPassword("secreto");
+
+        ResponseEntity<GroupResponseDTO> result = groupController.joinGroup(1L, request, authentication);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
     }
 
     @Test
@@ -121,5 +164,69 @@ class GroupControllerTest {
                 groupController.getGroupDocuments(1L, 0, 10, authentication);
 
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void getGroupMembers_returnsOk() {
+        Authentication authentication = mock(Authentication.class);
+        when(authentication.getName()).thenReturn("alice");
+        GroupMemberResponseDTO member = new GroupMemberResponseDTO();
+        member.setUsername("alice");
+        member.setGroupRole("CREATOR");
+        when(groupService.getMembers(1L, "alice")).thenReturn(List.of(member));
+
+        ResponseEntity<List<GroupMemberResponseDTO>> result = groupController.getGroupMembers(1L, authentication);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(result.getBody()).hasSize(1);
+    }
+
+    @Test
+    void getMyGroups_returnsOk() {
+        Authentication authentication = mock(Authentication.class);
+        when(authentication.getName()).thenReturn("alice");
+        when(groupService.getMyGroups("alice")).thenReturn(List.of(response()));
+
+        ResponseEntity<List<GroupResponseDTO>> result = groupController.getMyGroups(authentication);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(result.getBody()).hasSize(1);
+    }
+
+    @Test
+    void markAsSeen_returnsNoContent() {
+        Authentication authentication = mock(Authentication.class);
+        when(authentication.getName()).thenReturn("alice");
+
+        ResponseEntity<Void> result = groupController.markAsSeen(1L, authentication);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        org.mockito.Mockito.verify(groupService).markAsSeen(1L, "alice");
+    }
+
+    @Test
+    void inviteAndPasswordEndpoints_delegateToService() {
+        Authentication authentication = mock(Authentication.class);
+        when(authentication.getName()).thenReturn("alice");
+        com.eduquest.api.dto.response.GroupInviteResponseDTO invite =
+                new com.eduquest.api.dto.response.GroupInviteResponseDTO("AB12CD", "token", LocalDateTime.now().plusDays(7));
+        when(groupService.createInvite(1L, "alice", true)).thenReturn(invite);
+        com.eduquest.api.dto.request.GroupPasswordRequestDTO request = new com.eduquest.api.dto.request.GroupPasswordRequestDTO();
+        request.setPassword("nueva123");
+
+        assertThat(groupController.createInvite(1L, true, authentication).getBody().token()).isEqualTo("token");
+        assertThat(groupController.changePassword(1L, request, authentication).getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        org.mockito.Mockito.verify(groupService).changePassword(1L, "nueva123", "alice");
+    }
+
+    @Test
+    void joinGroup_withInviteToken_forwardsIt() {
+        Authentication authentication = mock(Authentication.class);
+        when(authentication.getName()).thenReturn("alice");
+        when(groupService.joinGroup(1L, "alice", null, "token")).thenReturn(response());
+        JoinGroupRequestDTO request = new JoinGroupRequestDTO();
+        request.setInviteToken("token");
+
+        assertThat(groupController.joinGroup(1L, request, authentication).getStatusCode()).isEqualTo(HttpStatus.OK);
     }
 }

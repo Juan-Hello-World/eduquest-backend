@@ -27,7 +27,8 @@ jwt:
   expiration-access: 3600000
   expiration-refresh: 604800000
 
-openai:
+gemini:
   api:
     key: test-key
-    url: https://api.openai.com/v1/chat/completions
+    url: https://generativelanguage.googleapis.com/v1beta/models
+    model: gemini-3.5-flash-lite

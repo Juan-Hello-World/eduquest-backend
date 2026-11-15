@@ -6,6 +6,7 @@ import com.eduquest.api.entity.Role;
 import com.eduquest.api.entity.RoleName;
 import com.eduquest.api.entity.User;
 import com.eduquest.api.exception.BadRequestException;
+import com.eduquest.api.exception.InvalidOperationException;
 import com.eduquest.api.exception.ResourceNotFoundException;
 import com.eduquest.api.repository.RoleRepository;
 import com.eduquest.api.repository.UserRepository;
@@ -15,6 +16,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -39,6 +41,11 @@ public class AdminServiceImpl implements AdminService {
                 .map(role -> role.getName().name())
                 .collect(Collectors.toSet());
         dto.setRoles(roles);
+        dto.setAvatarUrl(UserResponseDTO.avatarUrlFor(user.getId(), user.getAvatarVersion()));
+        dto.setAdvisor(user.isAdvisor());
+        dto.setBanned(user.isBanned());
+        dto.setBanReason(user.getBanReason());
+        dto.setBannedAt(user.getBannedAt());
         return dto;
     }
 
@@ -81,5 +88,37 @@ public class AdminServiceImpl implements AdminService {
         roles.add(role);
 
         return mapToResponseDTO(user);
+    }
+
+    @Override
+    @Transactional
+    public UserResponseDTO banUser(Long id, String reason, String adminUsername) {
+        User user = findUser(id);
+        if (user.getUsername().equals(adminUsername)) {
+            throw new InvalidOperationException("No puedes vetar tu propia cuenta");
+        }
+        boolean isAdmin = user.getRoles().stream().anyMatch(role -> role.getName() == RoleName.ROLE_ADMIN);
+        if (isAdmin) {
+            throw new InvalidOperationException("No se puede vetar a otro administrador");
+        }
+        user.setBanned(true);
+        user.setBanReason(reason.trim());
+        user.setBannedAt(LocalDateTime.now());
+        return mapToResponseDTO(userRepository.save(user));
+    }
+
+    @Override
+    @Transactional
+    public UserResponseDTO unbanUser(Long id) {
+        User user = findUser(id);
+        user.setBanned(false);
+        user.setBanReason(null);
+        user.setBannedAt(null);
+        return mapToResponseDTO(userRepository.save(user));
+    }
+
+    private User findUser(Long id) {
+        return userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado con id: " + id));
     }
 }

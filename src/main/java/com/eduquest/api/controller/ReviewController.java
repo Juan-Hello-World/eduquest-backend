@@ -1,6 +1,7 @@
 package com.eduquest.api.controller;
 
 import com.eduquest.api.dto.request.ReviewRequestDTO;
+import com.eduquest.api.dto.request.ReviewUpdateRequestDTO;
 import com.eduquest.api.dto.response.PageResponseDTO;
 import com.eduquest.api.dto.response.ReviewResponseDTO;
 import com.eduquest.api.security.UserPrincipal;
@@ -33,6 +34,16 @@ public class ReviewController {
             @AuthenticationPrincipal UserPrincipal principal) {
         ReviewResponseDTO response = reviewService.createReview(request, principal.getUsername());
         return new ResponseEntity<>(response, HttpStatus.CREATED);
+    }
+
+    @PutMapping("/reviews/{id}")
+    @Operation(summary = "Actualizar reseña", description = "Solo el autor de la reseña puede editarla.")
+    public ResponseEntity<ReviewResponseDTO> updateReview(
+            @PathVariable Long id,
+            @Valid @RequestBody ReviewUpdateRequestDTO request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        ReviewResponseDTO response = reviewService.updateReview(id, request, principal.getUsername());
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/documents/{documentId}/reviews")

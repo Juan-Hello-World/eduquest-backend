@@ -9,6 +9,8 @@ import lombok.Setter;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.Set;
 
 @Entity
 @Table(name = "study_plans")
@@ -29,7 +31,7 @@ public class StudyPlan {
 
     @NotBlank
     @Column(nullable = false)
-    private String difficulty; // Baja, Media, Alta
+    private String difficulty;
 
     @Column(name = "generated_content", nullable = false, columnDefinition = "TEXT")
     private String generatedContent;
@@ -40,4 +42,9 @@ public class StudyPlan {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
+
+    @ElementCollection
+    @CollectionTable(name = "study_plan_completed_steps", joinColumns = @JoinColumn(name = "plan_id"))
+    @Column(name = "step_index", nullable = false)
+    private Set<Integer> completedSteps = new HashSet<>();
 }

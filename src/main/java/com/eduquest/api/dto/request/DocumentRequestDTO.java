@@ -21,4 +21,10 @@ public class DocumentRequestDTO {
     private String fileUrl;
 
     private Set<String> tags;
+
+    @Size(max = 100, message = "El curso no puede superar los 100 caracteres")
+    private String course;
+
+    @Size(max = 100, message = "La universidad no puede superar los 100 caracteres")
+    private String university;
 }

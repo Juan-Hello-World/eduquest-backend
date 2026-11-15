@@ -23,4 +23,6 @@ public class RegisterRequestDTO {
     @Pattern(regexp = "^(?=.*[A-Za-z])(?=.*\\d).+$",
             message = "la contraseña debe tener al menos una letra y un número")
     private String password;
+
+    private Boolean advisor;
 }

@@ -10,6 +10,7 @@ import com.eduquest.api.exception.ResourceNotFoundException;
 import com.eduquest.api.repository.RoleRepository;
 import com.eduquest.api.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
+import com.eduquest.api.exception.InvalidOperationException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -103,5 +104,49 @@ class AdminServiceImplTest {
 
         assertThatThrownBy(() -> adminService.updateUserRole(99L, "ROLE_MANAGER"))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void banUser_storesReasonAndDate() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(userRepository.save(user)).thenReturn(user);
+
+        UserResponseDTO dto = adminService.banUser(1L, "  Publicó material ofensivo  ", "admin");
+
+        assertThat(dto.isBanned()).isTrue();
+        assertThat(dto.getBanReason()).isEqualTo("Publicó material ofensivo");
+        assertThat(dto.getBannedAt()).isNotNull();
+    }
+
+    @Test
+    void banUser_ownAccount_throwsInvalidOperation() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> adminService.banUser(1L, "Motivo de prueba", "alice"))
+                .isInstanceOf(InvalidOperationException.class);
+    }
+
+    @Test
+    void banUser_anotherAdmin_throwsInvalidOperation() {
+        user.setRoles(new java.util.HashSet<>(Set.of(new Role(3L, RoleName.ROLE_ADMIN))));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> adminService.banUser(1L, "Motivo de prueba", "admin"))
+                .isInstanceOf(InvalidOperationException.class);
+    }
+
+    @Test
+    void unbanUser_clearsBan() {
+        user.setBanned(true);
+        user.setBanReason("Spam");
+        user.setBannedAt(java.time.LocalDateTime.now());
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(userRepository.save(user)).thenReturn(user);
+
+        UserResponseDTO dto = adminService.unbanUser(1L);
+
+        assertThat(dto.isBanned()).isFalse();
+        assertThat(dto.getBanReason()).isNull();
+        assertThat(dto.getBannedAt()).isNull();
     }
 }

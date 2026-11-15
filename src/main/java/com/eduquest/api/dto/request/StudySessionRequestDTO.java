@@ -13,7 +13,7 @@ import java.time.LocalDateTime;
 @Getter
 @Setter
 public class StudySessionRequestDTO {
-    @NotBlank (message = "El título de la sesión es obligtorio")
+    @NotBlank (message = "El título de la sesión es obligatorio")
     @Size(max = 150)
     private String title;
 
@@ -23,8 +23,9 @@ public class StudySessionRequestDTO {
     @Future(message = "La sesión debe programarse en una fecha futura")
     private LocalDateTime scheduledAt;
 
-    @Pattern(regexp = "^https?://.+", message = "El enlace de la reunión debe comenzar con http:// o https://")
+    @NotBlank(message = "El enlace de la reunión es obligatorio")
+    @Pattern(regexp = "^https?://\\S+$", message = "El enlace de la reunión debe comenzar con http:// o https://")
+    @Size(max = 255, message = "El enlace de la reunión es demasiado largo")
     private String meetingUrl;
-
 
 }

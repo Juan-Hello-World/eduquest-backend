@@ -9,6 +9,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -45,4 +46,49 @@ public class User {
             inverseJoinColumns = @JoinColumn(name = "role_id")
     )
     private Set<Role> roles = new HashSet<>();
+
+    @Column(name = "avatar_version")
+    private Long avatarVersion;
+
+    @Column(name = "banned")
+    private Boolean banned = false;
+
+    @Column(name = "ban_reason", columnDefinition = "TEXT")
+    private String banReason;
+
+    @Column(name = "banned_at")
+    private LocalDateTime bannedAt;
+
+    @Column(name = "advisor")
+    private Boolean advisor = false;
+
+    @Column(name = "reset_code_hash")
+    private String resetCodeHash;
+
+    @Column(name = "reset_code_expires_at")
+    private LocalDateTime resetCodeExpiresAt;
+
+    @Column(name = "reset_attempts")
+    private Integer resetAttempts;
+
+    @ElementCollection
+    @CollectionTable(name = "user_badges", joinColumns = @JoinColumn(name = "user_id"))
+    @Column(name = "badge_code", length = 30)
+    private Set<String> earnedBadges = new HashSet<>();
+
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "saved_documents",
+            joinColumns = @JoinColumn(name = "user_id"),
+            inverseJoinColumns = @JoinColumn(name = "document_id")
+    )
+    private Set<Document> savedDocuments = new HashSet<>();
+
+    public boolean isBanned() {
+        return Boolean.TRUE.equals(banned);
+    }
+
+    public boolean isAdvisor() {
+        return Boolean.TRUE.equals(advisor);
+    }
 }

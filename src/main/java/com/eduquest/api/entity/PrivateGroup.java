@@ -8,6 +8,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -31,6 +32,25 @@ public class PrivateGroup {
     @Column(columnDefinition = "TEXT")
     private String description;
 
+    @Column(unique = true, length = 8)
+    private String code;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 10)
+    private GroupVisibility visibility = GroupVisibility.PUBLIC;
+
+    @Column(name = "join_password")
+    private String joinPassword;
+
+    @Column(name = "last_activity_at")
+    private LocalDateTime lastActivityAt;
+
+    @Column(name = "invite_token", length = 40)
+    private String inviteToken;
+
+    @Column(name = "invite_expires_at")
+    private LocalDateTime inviteExpiresAt;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "creator_id")
     private User creator;
@@ -42,4 +62,8 @@ public class PrivateGroup {
             inverseJoinColumns = @JoinColumn(name = "user_id")
     )
     private Set<User> members = new HashSet<>();
+
+    public boolean isPrivate() {
+        return visibility == GroupVisibility.PRIVATE;
+    }
 }

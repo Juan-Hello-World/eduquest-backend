@@ -17,6 +17,7 @@ public class AuthResponseDTO {
     private String username;
     private String email;
     private Set<String> roles;
+    private String avatarUrl;
 
     public AuthResponseDTO(String token, String refreshToken, Long id, String username, String email, Set<String> roles) {
         this.token = token;

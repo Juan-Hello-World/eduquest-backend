@@ -95,4 +95,29 @@ class JwtAuthorizationFilterTest {
         verify(jwtService, never()).extractUsername(org.mockito.ArgumentMatchers.anyString());
         verify(chain).doFilter(request, response);
     }
+
+    @Test
+    void withBannedUser_returns403WithBanInfoAndStopsChain() throws Exception {
+        UserPrincipal banned = new UserPrincipal(2L, "bob", "bob@utec.edu.pe", "hash", List.of(),
+                true, "Spam con \"comillas\"", java.time.LocalDateTime.of(2026, 11, 10, 9, 0));
+        when(jwtService.isValidToken("tok")).thenReturn(true);
+        when(jwtService.getTokenType("tok")).thenReturn("access");
+        when(jwtService.extractUsername("tok")).thenReturn("bob");
+        when(userDetailsService.loadUserByUsername("bob")).thenReturn(banned);
+
+        MockHttpServletRequest request = request();
+        request.addHeader("Authorization", "Bearer tok");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = mock(FilterChain.class);
+
+        filter.doFilterInternal(request, response, chain);
+
+        assertThat(response.getStatus()).isEqualTo(403);
+        assertThat(response.getContentAsString())
+                .contains("\"code\":\"USER_BANNED\"")
+                .contains("Spam con \\\"comillas\\\"")
+                .contains("2026-11-10T09:00");
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        org.mockito.Mockito.verifyNoInteractions(chain);
+    }
 }

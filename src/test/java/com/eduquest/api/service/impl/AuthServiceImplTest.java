@@ -14,6 +14,7 @@ import com.eduquest.api.repository.UserRepository;
 import com.eduquest.api.security.JwtService;
 import com.eduquest.api.security.UserPrincipal;
 import org.junit.jupiter.api.BeforeEach;
+import com.eduquest.api.exception.UserBannedException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -180,5 +181,50 @@ class AuthServiceImplTest {
 
         assertThatThrownBy(() -> authService.refreshToken("rt"))
                 .isInstanceOf(UnauthorizedException.class);
+    }
+
+    @Test
+    void authenticateUser_whenBanned_throwsUserBanned() {
+        user.setBanned(true);
+        user.setBanReason("Spam en los grupos");
+        Authentication authentication = org.mockito.Mockito.mock(Authentication.class);
+        when(authentication.getPrincipal()).thenReturn(principal);
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
+                .thenReturn(authentication);
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+
+        LoginRequestDTO request = new LoginRequestDTO();
+        request.setUsername("alice");
+        request.setPassword("Password123");
+
+        assertThatThrownBy(() -> authService.authenticateUser(request))
+                .isInstanceOf(UserBannedException.class)
+                .extracting("reason").isEqualTo("Spam en los grupos");
+    }
+
+    @Test
+    void registerUser_withEmailOfBannedUser_throwsUserBanned() {
+        user.setBanned(true);
+        when(userRepository.findByEmail("alice@utec.edu.pe")).thenReturn(Optional.of(user));
+
+        RegisterRequestDTO request = new RegisterRequestDTO();
+        request.setUsername("alice2");
+        request.setEmail("alice@utec.edu.pe");
+        request.setPassword("Password123");
+
+        assertThatThrownBy(() -> authService.registerUser(request))
+                .isInstanceOf(UserBannedException.class);
+    }
+
+    @Test
+    void refreshToken_whenBanned_throwsUserBanned() {
+        user.setBanned(true);
+        when(jwtService.isValidToken("refresh")).thenReturn(true);
+        when(jwtService.getTokenType("refresh")).thenReturn("refresh");
+        when(jwtService.extractUsername("refresh")).thenReturn("alice");
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> authService.refreshToken("refresh"))
+                .isInstanceOf(UserBannedException.class);
     }
 }

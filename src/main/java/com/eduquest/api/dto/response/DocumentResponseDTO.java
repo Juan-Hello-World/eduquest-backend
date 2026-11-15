@@ -15,5 +15,7 @@ public class DocumentResponseDTO {
     private LocalDateTime uploadedAt;
     private String authorUsername;
     private String groupName;
+    private String course;
+    private String university;
     private Set<String> tags;
 }

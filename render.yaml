@@ -30,11 +30,19 @@ services:
         value: 3600000
       - key: JWT_EXPIRATION_REFRESH
         value: 604800000
-      - key: OPENAI_API_KEY
+      - key: GEMINI_API_KEY
         sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash-lite
       - key: MAIL_USER
         sync: false
       - key: MAIL_APP_PASSWORD
+        sync: false
+      - key: ADMIN_INITIAL_PASSWORD
+        sync: false
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: FRONTEND_URL
         sync: false
       - key: SPRING_PROFILES_ACTIVE
         value: prod

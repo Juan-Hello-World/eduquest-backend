@@ -6,6 +6,9 @@ import com.eduquest.api.dto.response.PageResponseDTO;
 import com.eduquest.api.entity.Document;
 import com.eduquest.api.entity.PrivateGroup;
 import com.eduquest.api.entity.User;
+import com.eduquest.api.event.OnDocumentUploadedEvent;
+import com.eduquest.api.event.OnGroupActivityEvent;
+import com.eduquest.api.event.OnUserActivityEvent;
 import com.eduquest.api.exception.ForbiddenException;
 import com.eduquest.api.exception.ResourceNotFoundException;
 import com.eduquest.api.repository.DocumentRepository;
@@ -30,6 +33,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -42,6 +46,7 @@ class DocumentServiceImplTest {
     @Mock PrivateGroupRepository groupRepository;
     @Mock ApplicationEventPublisher eventPublisher;
     @Mock com.eduquest.api.repository.TagRepository tagRepository;
+    @Mock com.eduquest.api.repository.ReviewRepository reviewRepository;
 
 
     @InjectMocks DocumentServiceImpl documentService;
@@ -89,7 +94,8 @@ class DocumentServiceImplTest {
         assertThat(response.getId()).isEqualTo(7L);
         assertThat(response.getTitle()).isEqualTo("Apuntes de Calculo");
         assertThat(response.getAuthorUsername()).isEqualTo("alice");
-        verify(eventPublisher).publishEvent(any());
+        verify(eventPublisher).publishEvent(isA(OnDocumentUploadedEvent.class));
+        verify(eventPublisher).publishEvent(isA(OnUserActivityEvent.class));
     }
 
     @Test
@@ -156,7 +162,9 @@ class DocumentServiceImplTest {
         assertThat(response.getId()).isEqualTo(8L);
         assertThat(response.getGroupName()).isEqualTo("Grupo de Calculo");
         assertThat(response.getAuthorUsername()).isEqualTo("alice");
-        verify(eventPublisher).publishEvent(any());
+        verify(eventPublisher).publishEvent(isA(OnDocumentUploadedEvent.class));
+        verify(eventPublisher).publishEvent(isA(OnGroupActivityEvent.class));
+        verify(eventPublisher).publishEvent(isA(OnUserActivityEvent.class));
     }
 
     @Test
@@ -201,7 +209,7 @@ class DocumentServiceImplTest {
     @Test
     void getAllDocuments_withSearchAndTag_callsSearchPublicDocuments() {
         Pageable pageable = PageRequest.of(0, 10);
-        when(documentRepository.searchPublicDocuments("Calculo", "Matematicas", pageable))
+        when(documentRepository.searchPublicDocuments("%calculo%", "matematicas", null, null, pageable))
                 .thenReturn(new PageImpl<>(List.of(document), pageable, 1));
 
         PageResponseDTO<DocumentResponseDTO> page =
@@ -253,6 +261,108 @@ class DocumentServiceImplTest {
 
         assertThat(page.content()).hasSize(2);
         assertThat(page.content().get(0).getGroupName()).isNull();
-        assertThat(page.content().get(1).getGroupName()).isEqualTo("Grupo 1");
+        assertThat(page.content().get(1).getGroupName()).isEqualTo("Grupo de Calculo");
+    }
+
+    @Test
+    void getAllDocuments_withCourseAndUniversity_buildsLikePatterns() {
+        Pageable pageable = PageRequest.of(0, 10);
+        when(documentRepository.searchPublicDocuments(null, null, "%calculo i%", "%utec%", pageable))
+                .thenReturn(new PageImpl<>(List.of(document), pageable, 1));
+
+        PageResponseDTO<DocumentResponseDTO> page =
+                documentService.getAllDocuments(null, " ", "Calculo I", "UTEC", pageable);
+
+        assertThat(page.content()).hasSize(1);
+    }
+
+    @Test
+    void createDocument_storesCourseAndUniversity() {
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(documentRepository.save(any(Document.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        DocumentRequestDTO request = new DocumentRequestDTO();
+        request.setTitle("Apuntes");
+        request.setFileUrl("https://x/a.pdf");
+        request.setCourse("  Calculo I ");
+        request.setUniversity(" ");
+
+        DocumentResponseDTO dto = documentService.createDocument(request, "alice");
+
+        assertThat(dto.getCourse()).isEqualTo("Calculo I");
+        assertThat(dto.getUniversity()).isNull();
+    }
+
+    @Test
+    void saveDocument_publicDocument_addsToSavedList() {
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(documentRepository.findById(1L)).thenReturn(Optional.of(document));
+
+        documentService.saveDocument(1L, "alice");
+
+        assertThat(user.getSavedDocuments()).contains(document);
+        verify(userRepository).save(user);
+    }
+
+    @Test
+    void saveDocument_groupDocumentWithoutMembership_throwsForbidden() {
+        document.setGroup(group);
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(documentRepository.findById(1L)).thenReturn(Optional.of(document));
+        when(groupRepository.existsByIdAndMembersId(1L, 1L)).thenReturn(false);
+
+        assertThatThrownBy(() -> documentService.saveDocument(1L, "alice"))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void saveDocument_missingDocument_throwsNotFound() {
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(documentRepository.findById(9L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> documentService.saveDocument(9L, "alice"))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void unsaveDocument_removesOnlyWhenPresent() {
+        user.getSavedDocuments().add(document);
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+
+        documentService.unsaveDocument(1L, "alice");
+        documentService.unsaveDocument(1L, "alice");
+
+        assertThat(user.getSavedDocuments()).isEmpty();
+        verify(userRepository, org.mockito.Mockito.times(1)).save(user);
+    }
+
+    @Test
+    void getSavedDocuments_andIds_useCurrentUser() {
+        Pageable pageable = PageRequest.of(0, 10);
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(documentRepository.findSavedByUserId(1L, pageable)).thenReturn(new PageImpl<>(List.of(document), pageable, 1));
+        when(documentRepository.findSavedIdsByUserId(1L)).thenReturn(List.of(1L));
+
+        assertThat(documentService.getSavedDocuments("alice", pageable).content()).hasSize(1);
+        assertThat(documentService.getSavedDocumentIds("alice")).containsExactly(1L);
+    }
+
+    @Test
+    void deleteDocument_removesReviewsSavedEntriesAndDocument() {
+        when(documentRepository.findById(1L)).thenReturn(Optional.of(document));
+
+        documentService.deleteDocument(1L);
+
+        verify(reviewRepository).deleteByDocumentId(1L);
+        verify(documentRepository).removeFromSavedLists(1L);
+        verify(documentRepository).delete(document);
+    }
+
+    @Test
+    void deleteDocument_missing_throwsNotFound() {
+        when(documentRepository.findById(9L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> documentService.deleteDocument(9L))
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 }

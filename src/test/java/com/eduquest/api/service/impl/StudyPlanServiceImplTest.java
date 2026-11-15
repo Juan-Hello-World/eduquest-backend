@@ -8,7 +8,7 @@ import com.eduquest.api.exception.InvalidOperationException;
 import com.eduquest.api.exception.ResourceNotFoundException;
 import com.eduquest.api.repository.StudyPlanRepository;
 import com.eduquest.api.repository.UserRepository;
-import com.eduquest.api.service.OpenAIService;
+import com.eduquest.api.service.StudyPlanGenerationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -31,7 +31,7 @@ import static org.mockito.Mockito.when;
 @MockitoSettings(strictness = Strictness.LENIENT)
 class StudyPlanServiceImplTest {
 
-    @Mock OpenAIService openAIService;
+    @Mock StudyPlanGenerationService generationService;
     @Mock StudyPlanRepository studyPlanRepository;
     @Mock UserRepository userRepository;
     @Mock ApplicationEventPublisher eventPublisher;
@@ -51,7 +51,7 @@ class StudyPlanServiceImplTest {
     @Test
     void generateStudyPlan_withValidAiResponse_persistsAndPublishesEvent() {
         when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
-        when(openAIService.generateStudyPlan(any())).thenReturn("Plan de estudio detallado...");
+        when(generationService.generateStudyPlan(any())).thenReturn("Plan de estudio detallado...");
         when(studyPlanRepository.save(any(StudyPlan.class))).thenAnswer(invocation -> {
             StudyPlan saved = invocation.getArgument(0);
             saved.setId(1L);
@@ -74,7 +74,7 @@ class StudyPlanServiceImplTest {
     @Test
     void generateStudyPlan_withBlankAiResponse_throwsInvalidOperation() {
         when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
-        when(openAIService.generateStudyPlan(any())).thenReturn("   ");
+        when(generationService.generateStudyPlan(any())).thenReturn("   ");
 
         StudyPlanRequestDTO request = new StudyPlanRequestDTO();
         request.setCourseName("Matematica Discreta");
@@ -110,5 +110,85 @@ class StudyPlanServiceImplTest {
 
         assertThat(plans).hasSize(1);
         assertThat(plans.get(0).getCourseName()).isEqualTo("Algoritmos");
+    }
+
+    @Test
+    void generateStudyPlan_withSeveralCourses_buildsCyclePrompt() {
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(generationService.generateStudyPlan(any())).thenReturn("Semana 1\n- Repasar");
+        when(studyPlanRepository.save(any(StudyPlan.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        StudyPlanRequestDTO request = new StudyPlanRequestDTO();
+        request.setCourses(java.util.List.of(
+                new com.eduquest.api.dto.request.CourseInputDTO("Calculo", "alta"),
+                new com.eduquest.api.dto.request.CourseInputDTO("Fisica", "Media")));
+
+        StudyPlanResponseDTO response = studyPlanService.generateStudyPlan(request, "alice");
+
+        verify(generationService).generateStudyPlan("Cursos del ciclo: Calculo (Alta); Fisica (Media)");
+        assertThat(response.getCourseName()).isEqualTo("Calculo, Fisica");
+        assertThat(response.getDifficulty()).isEqualTo("Mixta");
+        assertThat(response.getTotalSteps()).isEqualTo(1);
+    }
+
+    @Test
+    void generateStudyPlan_withLongCourseList_abbreviatesName() {
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(generationService.generateStudyPlan(any())).thenReturn("Plan");
+        when(studyPlanRepository.save(any(StudyPlan.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        String longName = "Curso con un nombre bastante largo para probar";
+        StudyPlanRequestDTO request = new StudyPlanRequestDTO();
+        request.setCourses(java.util.List.of(
+                new com.eduquest.api.dto.request.CourseInputDTO(longName, "Baja"),
+                new com.eduquest.api.dto.request.CourseInputDTO(longName, "Baja"),
+                new com.eduquest.api.dto.request.CourseInputDTO(longName, "Baja")));
+
+        StudyPlanResponseDTO response = studyPlanService.generateStudyPlan(request, "alice");
+
+        assertThat(response.getCourseName()).hasSize(100).endsWith("...");
+    }
+
+    @Test
+    void generateStudyPlan_withoutCourses_throwsInvalidOperation() {
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+
+        StudyPlanRequestDTO request = new StudyPlanRequestDTO();
+
+        assertThat(request.isCourseProvided()).isFalse();
+        assertThatThrownBy(() -> studyPlanService.generateStudyPlan(request, "alice"))
+                .isInstanceOf(InvalidOperationException.class);
+    }
+
+    @Test
+    void updateProgress_keepsOnlyValidStepIndexes() {
+        StudyPlan plan = new StudyPlan();
+        plan.setId(3L);
+        plan.setGeneratedContent("Semana 1\n- Leer\n- Practicar\n1. Evaluar");
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(studyPlanRepository.findByIdAndUserId(3L, 1L)).thenReturn(Optional.of(plan));
+        when(studyPlanRepository.save(any(StudyPlan.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        com.eduquest.api.dto.request.StudyPlanProgressRequestDTO request =
+                new com.eduquest.api.dto.request.StudyPlanProgressRequestDTO();
+        request.setCompletedSteps(new java.util.HashSet<>(java.util.Arrays.asList(2, 0, 7, -1, null)));
+
+        StudyPlanResponseDTO response = studyPlanService.updateProgress(3L, request, "alice");
+
+        assertThat(response.getTotalSteps()).isEqualTo(3);
+        assertThat(response.getCompletedSteps()).containsExactly(0, 2);
+    }
+
+    @Test
+    void updateProgress_planOfAnotherUser_throwsNotFound() {
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(studyPlanRepository.findByIdAndUserId(3L, 1L)).thenReturn(Optional.empty());
+
+        com.eduquest.api.dto.request.StudyPlanProgressRequestDTO request =
+                new com.eduquest.api.dto.request.StudyPlanProgressRequestDTO();
+        request.setCompletedSteps(java.util.Set.of(0));
+
+        assertThatThrownBy(() -> studyPlanService.updateProgress(3L, request, "alice"))
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 }

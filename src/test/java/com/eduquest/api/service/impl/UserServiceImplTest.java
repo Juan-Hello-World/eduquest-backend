@@ -1,0 +1,225 @@
+package com.eduquest.api.service.impl;
+
+import com.eduquest.api.dto.request.UpdateProfileRequestDTO;
+import com.eduquest.api.dto.response.AuthResponseDTO;
+import com.eduquest.api.dto.response.AvatarImageDTO;
+import com.eduquest.api.dto.response.UserResponseDTO;
+import com.eduquest.api.entity.Role;
+import com.eduquest.api.entity.RoleName;
+import com.eduquest.api.entity.User;
+import com.eduquest.api.entity.UserAvatar;
+import com.eduquest.api.exception.BadRequestException;
+import com.eduquest.api.exception.DuplicateResourceException;
+import com.eduquest.api.exception.ResourceNotFoundException;
+import com.eduquest.api.repository.UserAvatarRepository;
+import com.eduquest.api.repository.UserRepository;
+import com.eduquest.api.security.JwtService;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
+import org.springframework.mock.web.MockMultipartFile;
+
+import java.util.HashSet;
+import java.util.Optional;
+import java.util.Set;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
+class UserServiceImplTest {
+
+    @Mock UserRepository userRepository;
+    @Mock UserAvatarRepository userAvatarRepository;
+    @Mock JwtService jwtService;
+    @Mock org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
+
+    @InjectMocks UserServiceImpl userService;
+
+    private User user;
+
+    @BeforeEach
+    void setUp() {
+        user = new User();
+        user.setId(1L);
+        user.setUsername("alice");
+        user.setEmail("alice@utec.edu.pe");
+        user.setPassword("hash");
+        user.setRoles(new HashSet<>(Set.of(new Role(1L, RoleName.ROLE_USER))));
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    }
+
+    @Test
+    void getCurrentUser_withoutAvatar_returnsNullAvatarUrl() {
+        UserResponseDTO dto = userService.getCurrentUser("alice");
+
+        assertThat(dto.getUsername()).isEqualTo("alice");
+        assertThat(dto.getRoles()).containsExactly("ROLE_USER");
+        assertThat(dto.getAvatarUrl()).isNull();
+    }
+
+    @Test
+    void getCurrentUser_unknownUser_throwsNotFound() {
+        when(userRepository.findByUsername("ghost")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> userService.getCurrentUser("ghost"))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void updateProfile_newUsername_savesAndReturnsTokens() {
+        when(userRepository.existsByUsername("alicia")).thenReturn(false);
+        when(jwtService.generateAccessToken(any())).thenReturn("access");
+        when(jwtService.generateRefreshToken(any())).thenReturn("refresh");
+        UpdateProfileRequestDTO request = new UpdateProfileRequestDTO();
+        request.setUsername("  alicia ");
+
+        AuthResponseDTO response = userService.updateProfile("alice", request);
+
+        assertThat(response.getUsername()).isEqualTo("alicia");
+        assertThat(response.getToken()).isEqualTo("access");
+        assertThat(response.getRefreshToken()).isEqualTo("refresh");
+        verify(userRepository).save(user);
+    }
+
+    @Test
+    void updateProfile_sameUsername_doesNotSave() {
+        UpdateProfileRequestDTO request = new UpdateProfileRequestDTO();
+        request.setUsername("alice");
+
+        userService.updateProfile("alice", request);
+
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    void updateProfile_takenUsername_throwsConflict() {
+        when(userRepository.existsByUsername("bob")).thenReturn(true);
+        UpdateProfileRequestDTO request = new UpdateProfileRequestDTO();
+        request.setUsername("bob");
+
+        assertThatThrownBy(() -> userService.updateProfile("alice", request))
+                .isInstanceOf(DuplicateResourceException.class);
+    }
+
+    @Test
+    void updateAvatar_validImage_storesItAndReturnsUrl() {
+        when(userAvatarRepository.findById(1L)).thenReturn(Optional.empty());
+        MockMultipartFile file = new MockMultipartFile("file", "me.png", "image/png", new byte[]{1, 2, 3});
+
+        UserResponseDTO dto = userService.updateAvatar("alice", file);
+
+        verify(userAvatarRepository).save(any(UserAvatar.class));
+        assertThat(user.getAvatarVersion()).isNotNull();
+        assertThat(dto.getAvatarUrl()).startsWith("/api/v1/users/1/avatar?v=");
+    }
+
+    @Test
+    void updateAvatar_emptyFile_throwsBadRequest() {
+        MockMultipartFile file = new MockMultipartFile("file", "me.png", "image/png", new byte[0]);
+
+        assertThatThrownBy(() -> userService.updateAvatar("alice", file))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void updateAvatar_tooLarge_throwsBadRequest() {
+        MockMultipartFile file = new MockMultipartFile("file", "me.png", "image/png", new byte[3 * 1024 * 1024]);
+
+        assertThatThrownBy(() -> userService.updateAvatar("alice", file))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("2 MB");
+    }
+
+    @Test
+    void updateAvatar_unsupportedType_throwsBadRequest() {
+        MockMultipartFile file = new MockMultipartFile("file", "me.gif", "image/gif", new byte[]{1});
+
+        assertThatThrownBy(() -> userService.updateAvatar("alice", file))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void deleteAvatar_removesImageAndClearsVersion() {
+        user.setAvatarVersion(123L);
+        when(userAvatarRepository.existsById(1L)).thenReturn(true);
+
+        userService.deleteAvatar("alice");
+
+        verify(userAvatarRepository).deleteById(1L);
+        assertThat(user.getAvatarVersion()).isNull();
+    }
+
+    @Test
+    void getAvatar_existing_returnsImage() {
+        UserAvatar avatar = new UserAvatar();
+        avatar.setData(new byte[]{7});
+        avatar.setContentType("image/png");
+        when(userAvatarRepository.findById(1L)).thenReturn(Optional.of(avatar));
+
+        AvatarImageDTO image = userService.getAvatar(1L);
+
+        assertThat(image.contentType()).isEqualTo("image/png");
+        assertThat(image.data()).containsExactly(7);
+    }
+
+    @Test
+    void getAvatar_missing_throwsNotFound() {
+        when(userAvatarRepository.findById(2L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> userService.getAvatar(2L))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void updateProfile_togglesAdvisorProfile() {
+        when(jwtService.generateAccessToken(any())).thenReturn("access");
+        when(jwtService.generateRefreshToken(any())).thenReturn("refresh");
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        UpdateProfileRequestDTO request = new UpdateProfileRequestDTO();
+        request.setUsername("alice");
+        request.setAdvisor(true);
+
+        userService.updateProfile("alice", request);
+
+        assertThat(user.isAdvisor()).isTrue();
+        assertThat(userService.getCurrentUser("alice").isAdvisor()).isTrue();
+        verify(userRepository).save(user);
+    }
+
+    @Test
+    void changePassword_withCorrectCurrentPassword_savesNewHash() {
+        when(passwordEncoder.matches("actual123", "hash")).thenReturn(true);
+        when(passwordEncoder.matches("nueva123", "hash")).thenReturn(false);
+        when(passwordEncoder.encode("nueva123")).thenReturn("hash-nuevo");
+
+        userService.changePassword("alice", "actual123", "nueva123");
+
+        assertThat(user.getPassword()).isEqualTo("hash-nuevo");
+        verify(userRepository).save(user);
+    }
+
+    @Test
+    void changePassword_withWrongOrRepeatedPassword_throwsBadRequest() {
+        when(passwordEncoder.matches("mala", "hash")).thenReturn(false);
+        when(passwordEncoder.matches("actual123", "hash")).thenReturn(true);
+
+        assertThatThrownBy(() -> userService.changePassword("alice", "mala", "nueva123"))
+                .isInstanceOf(com.eduquest.api.exception.BadRequestException.class)
+                .hasMessageContaining("actual");
+        assertThatThrownBy(() -> userService.changePassword("alice", "actual123", "actual123"))
+                .isInstanceOf(com.eduquest.api.exception.BadRequestException.class)
+                .hasMessageContaining("distinta");
+    }
+}
