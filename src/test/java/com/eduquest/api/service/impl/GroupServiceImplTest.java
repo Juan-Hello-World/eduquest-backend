@@ -7,13 +7,14 @@ import com.eduquest.api.dto.response.PageResponseDTO;
 import com.eduquest.api.entity.GroupVisibility;
 import com.eduquest.api.entity.GroupVisit;
 import com.eduquest.api.entity.PrivateGroup;
+import com.eduquest.api.entity.User;
 import com.eduquest.api.exception.BadRequestException;
 import com.eduquest.api.exception.ForbiddenException;
-import com.eduquest.api.entity.User;
+import com.eduquest.api.exception.InvalidOperationException;
 import com.eduquest.api.exception.ResourceNotFoundException;
-import com.eduquest.api.repository.PrivateGroupRepository;
 import com.eduquest.api.repository.DocumentRepository;
 import com.eduquest.api.repository.GroupVisitRepository;
+import com.eduquest.api.repository.PrivateGroupRepository;
 import com.eduquest.api.repository.StudySessionRepository;
 import com.eduquest.api.repository.UserRepository;
 import com.eduquest.api.service.GroupCodeGenerator;
@@ -53,6 +54,8 @@ class GroupServiceImplTest {
     @Mock StudySessionRepository sessionRepository;
     @Mock com.eduquest.api.repository.GroupMessageRepository messageRepository;
     @Mock org.springframework.context.ApplicationEventPublisher eventPublisher;
+    @Mock com.eduquest.api.service.DocumentService documentService;
+    @Mock GroupChatCleaner chatCleaner;
 
     @InjectMocks GroupServiceImpl groupService;
 
@@ -153,7 +156,7 @@ class GroupServiceImplTest {
 
         assertThat(page.content()).hasSize(2);
         assertThat(page.content().get(0).getCreatorUsername()).isEqualTo("alice");
-        assertThat(page.content().get(1).getCreatorUsername()).isEqualTo("Sin miembros");
+        assertThat(page.content().get(1).getCreatorUsername()).isNull();
         assertThat(page.content().get(0).isMember()).isTrue();
         assertThat(page.content().get(1).isMember()).isFalse();
     }
@@ -513,5 +516,151 @@ class GroupServiceImplTest {
         org.mockito.Mockito.verify(eventPublisher).publishEvent(captor.capture());
         assertThat(captor.getValue().getType()).isEqualTo(com.eduquest.api.entity.NotificationType.GROUP_MEMBER);
         assertThat(captor.getValue().getActorId()).isEqualTo(1L);
+    }
+
+    private PrivateGroup ownedGroup() {
+        PrivateGroup group = new PrivateGroup();
+        group.setId(9L);
+        group.setName("Mío");
+        group.setCreator(alice);
+        group.getMembers().add(alice);
+        when(groupRepository.findById(9L)).thenReturn(Optional.of(group));
+        when(groupRepository.save(any(PrivateGroup.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        return group;
+    }
+
+    @Test
+    void updateGroup_asCreator_changesNameAndDescription() {
+        ownedGroup();
+        com.eduquest.api.dto.request.GroupUpdateRequestDTO request = new com.eduquest.api.dto.request.GroupUpdateRequestDTO();
+        request.setName("  Cálculo II ");
+        request.setDescription("  ");
+
+        GroupResponseDTO response = groupService.updateGroup(9L, request, "alice");
+
+        assertThat(response.getName()).isEqualTo("Cálculo II");
+        assertThat(response.getDescription()).isNull();
+    }
+
+    @Test
+    void deleteGroup_asCreator_removesContentAndGroup() {
+        PrivateGroup group = ownedGroup();
+        com.eduquest.api.entity.Document document = new com.eduquest.api.entity.Document();
+        document.setId(4L);
+        when(documentRepository.findAllByGroupId(9L)).thenReturn(List.of(document));
+
+        groupService.deleteGroup(9L, "alice");
+
+        verify(documentService).deleteDocument(4L);
+        verify(messageRepository).deleteByGroupId(9L);
+        verify(visitRepository).deleteByGroupId(9L);
+        verify(groupRepository).delete(group);
+    }
+
+    @Test
+    void deleteGroup_byAdminOrStranger() {
+        PrivateGroup group = privateGroup();
+        when(groupRepository.findById(3L)).thenReturn(Optional.of(group));
+
+        assertThatThrownBy(() -> groupService.deleteGroup(3L, "alice")).isInstanceOf(ForbiddenException.class);
+
+        com.eduquest.api.entity.Role admin = new com.eduquest.api.entity.Role();
+        admin.setName(com.eduquest.api.entity.RoleName.ROLE_ADMIN);
+        alice.getRoles().add(admin);
+        groupService.deleteGroup(3L, "alice");
+        verify(groupRepository).delete(group);
+
+        when(groupRepository.findById(50L)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> groupService.deleteGroup(50L, "alice")).isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void leaveGroup_memberLeaves_creatorCannot() {
+        PrivateGroup group = privateGroup();
+        group.getMembers().add(alice);
+        when(groupRepository.findById(3L)).thenReturn(Optional.of(group));
+
+        groupService.leaveGroup(3L, "alice");
+
+        assertThat(group.getMembers()).extracting(User::getId).doesNotContain(1L);
+        verify(visitRepository).deleteByGroupIdAndUserId(3L, 1L);
+        assertThatThrownBy(() -> groupService.leaveGroup(3L, "alice")).isInstanceOf(InvalidOperationException.class);
+
+        ownedGroup();
+        assertThatThrownBy(() -> groupService.leaveGroup(9L, "alice")).isInstanceOf(InvalidOperationException.class);
+
+        when(groupRepository.findById(50L)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> groupService.leaveGroup(50L, "alice")).isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void removeMember_asCreator() {
+        PrivateGroup group = ownedGroup();
+        User bob = new User();
+        bob.setId(2L);
+        group.getMembers().add(bob);
+
+        groupService.removeMember(9L, 2L, "alice");
+
+        assertThat(group.getMembers()).extracting(User::getId).containsExactly(1L);
+        verify(visitRepository).deleteByGroupIdAndUserId(9L, 2L);
+        assertThatThrownBy(() -> groupService.removeMember(9L, 2L, "alice")).isInstanceOf(ResourceNotFoundException.class);
+        assertThatThrownBy(() -> groupService.removeMember(9L, 1L, "alice")).isInstanceOf(InvalidOperationException.class);
+    }
+
+    @Test
+    void removeMember_moderatorCannotRemoveManagers() {
+        PrivateGroup group = ownedGroup();
+        User mod = new User();
+        mod.setId(2L);
+        mod.setUsername("mod");
+        User other = new User();
+        other.setId(3L);
+        other.setUsername("other");
+        User peer = new User();
+        peer.setId(4L);
+        peer.setUsername("peer");
+        group.getMembers().add(mod);
+        group.getMembers().add(other);
+        group.getMembers().add(peer);
+        group.getModerators().add(mod);
+        group.getModerators().add(peer);
+        when(userRepository.findByUsername("mod")).thenReturn(Optional.of(mod));
+        when(userRepository.findByUsername("other")).thenReturn(Optional.of(other));
+
+        groupService.removeMember(9L, 3L, "mod");
+
+        assertThat(group.getMembers()).extracting(User::getId).doesNotContain(3L);
+        assertThatThrownBy(() -> groupService.removeMember(9L, 1L, "mod")).isInstanceOf(ForbiddenException.class);
+        assertThatThrownBy(() -> groupService.removeMember(9L, 4L, "mod")).isInstanceOf(ForbiddenException.class);
+        groupService.removeMember(9L, 4L, "alice");
+        assertThat(group.getModerators()).extracting(User::getId).containsExactly(2L);
+        assertThatThrownBy(() -> groupService.removeMember(9L, 2L, "other")).isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void getMembers_marksModerators() {
+        PrivateGroup group = ownedGroup();
+        User mod = new User();
+        mod.setId(2L);
+        mod.setUsername("mod");
+        group.getMembers().add(mod);
+        group.getModerators().add(mod);
+        when(groupRepository.existsByIdAndMembersId(9L, 1L)).thenReturn(true);
+
+        List<GroupMemberResponseDTO> members = groupService.getMembers(9L, "alice");
+
+        assertThat(members).extracting(GroupMemberResponseDTO::getGroupRole).containsExactly("CREATOR", "MODERATOR");
+    }
+
+    @Test
+    void deleteGroup_cleansChatExtras() {
+        PrivateGroup group = ownedGroup();
+
+        groupService.deleteGroup(9L, "alice");
+
+        verify(chatCleaner).beforeMessages(9L);
+        verify(chatCleaner).afterMessages(9L);
+        assertThat(group.getModerators()).isEmpty();
     }
 }

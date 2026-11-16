@@ -43,6 +43,8 @@ class UserServiceImplTest {
     @Mock UserAvatarRepository userAvatarRepository;
     @Mock JwtService jwtService;
     @Mock org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
+    @Mock com.eduquest.api.service.GamificationService gamificationService;
+    @Mock com.eduquest.api.service.DocumentService documentService;
 
     @InjectMocks UserServiceImpl userService;
 
@@ -221,5 +223,83 @@ class UserServiceImplTest {
         assertThatThrownBy(() -> userService.changePassword("alice", "actual123", "actual123"))
                 .isInstanceOf(com.eduquest.api.exception.BadRequestException.class)
                 .hasMessageContaining("distinta");
+    }
+
+    @Test
+    void getPublicProfile_returnsEarnedBadgesAndFollowState() {
+        User bob = new User();
+        bob.setId(2L);
+        bob.setUsername("bob");
+        bob.setAdvisor(true);
+        when(userRepository.findById(2L)).thenReturn(Optional.of(bob));
+        com.eduquest.api.dto.response.GamificationStatsDTO stats =
+                new com.eduquest.api.dto.response.GamificationStatsDTO(3, 1, 0, 0, 0, 0, 0);
+        when(gamificationService.getProfile(2L)).thenReturn(new com.eduquest.api.dto.response.GamificationProfileDTO(
+                35, 10, 4, stats, java.util.List.of(
+                        new com.eduquest.api.dto.response.BadgeDTO("FIRST_UPLOAD", "Primer aporte", "d", true),
+                        new com.eduquest.api.dto.response.BadgeDTO("CRITIC", "Crítico", "d", false))));
+        when(userRepository.countFollowers(2L)).thenReturn(5L);
+        when(userRepository.countFollowing(2L)).thenReturn(2L);
+        when(userRepository.existsByIdAndFollowingId(1L, 2L)).thenReturn(true);
+
+        com.eduquest.api.dto.response.PublicProfileDTO profile = userService.getPublicProfile("alice", 2L);
+
+        assertThat(profile.username()).isEqualTo("bob");
+        assertThat(profile.advisor()).isTrue();
+        assertThat(profile.points()).isEqualTo(35);
+        assertThat(profile.badges()).extracting("code").containsExactly("FIRST_UPLOAD");
+        assertThat(profile.followers()).isEqualTo(5);
+        assertThat(profile.followedByMe()).isTrue();
+        assertThat(profile.me()).isFalse();
+    }
+
+    @Test
+    void getPublicProfile_unknownUser_throwsNotFound() {
+        when(userRepository.findById(9L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> userService.getPublicProfile("alice", 9L))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void getPublicDocuments_delegatesToDocumentService() {
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(0, 6);
+        com.eduquest.api.dto.response.PageResponseDTO<com.eduquest.api.dto.response.DocumentResponseDTO> page =
+                com.eduquest.api.dto.response.PageResponseDTO.of(java.util.List.of(), 0, 6, 0);
+        when(documentService.getPublicDocumentsByAuthor(2L, pageable)).thenReturn(page);
+
+        assertThat(userService.getPublicDocuments(2L, pageable)).isSameAs(page);
+    }
+
+    @Test
+    void follow_addsUserAndRejectsSelf() {
+        User bob = new User();
+        bob.setId(2L);
+        bob.setUsername("bob");
+        when(userRepository.findById(2L)).thenReturn(Optional.of(bob));
+
+        userService.follow("alice", 2L);
+
+        assertThat(user.getFollowing()).containsExactly(bob);
+        verify(userRepository).save(user);
+        assertThatThrownBy(() -> userService.follow("alice", 1L))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void unfollow_removesUser_andListsFollowing() {
+        User bob = new User();
+        bob.setId(2L);
+        bob.setUsername("bob");
+        user.getFollowing().add(bob);
+        when(userRepository.findFollowing(1L)).thenReturn(java.util.List.of(bob));
+
+        assertThat(userService.getFollowing("alice")).extracting("username").containsExactly("bob");
+
+        userService.unfollow("alice", 2L);
+        userService.unfollow("alice", 2L);
+
+        assertThat(user.getFollowing()).isEmpty();
+        verify(userRepository, org.mockito.Mockito.times(1)).save(user);
     }
 }

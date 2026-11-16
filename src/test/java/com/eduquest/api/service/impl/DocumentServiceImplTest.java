@@ -47,6 +47,7 @@ class DocumentServiceImplTest {
     @Mock ApplicationEventPublisher eventPublisher;
     @Mock com.eduquest.api.repository.TagRepository tagRepository;
     @Mock com.eduquest.api.repository.ReviewRepository reviewRepository;
+    @Mock com.eduquest.api.service.FileStorageService fileStorageService;
 
 
     @InjectMocks DocumentServiceImpl documentService;
@@ -363,6 +364,96 @@ class DocumentServiceImplTest {
         when(documentRepository.findById(9L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> documentService.deleteDocument(9L))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void updateDocument_byAuthor_updatesFieldsAndDropsOldFile() {
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(documentRepository.findById(1L)).thenReturn(Optional.of(document));
+        when(documentRepository.save(any(Document.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        DocumentRequestDTO request = new DocumentRequestDTO();
+        request.setTitle(" Nuevo título ");
+        request.setDescription(" ");
+        request.setFileUrl("https://cloud.example/nuevo.pdf");
+        request.setCourse("Cálculo");
+
+        DocumentResponseDTO response = documentService.updateDocument(1L, request, "alice");
+
+        assertThat(response.getTitle()).isEqualTo("Nuevo título");
+        assertThat(response.getDescription()).isNull();
+        assertThat(response.getCourse()).isEqualTo("Cálculo");
+        verify(fileStorageService).deleteByUrl("https://cloud.example/calculo.pdf");
+    }
+
+    @Test
+    void updateDocument_sameFile_keepsIt() {
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(documentRepository.findById(1L)).thenReturn(Optional.of(document));
+        when(documentRepository.save(any(Document.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        DocumentRequestDTO request = new DocumentRequestDTO();
+        request.setTitle("Apuntes");
+        request.setFileUrl("https://cloud.example/calculo.pdf");
+
+        documentService.updateDocument(1L, request, "alice");
+
+        org.mockito.Mockito.verify(fileStorageService, org.mockito.Mockito.never()).deleteByUrl(any());
+    }
+
+    @Test
+    void deleteOwnDocument_authorOrAdminOnly() {
+        User bob = new User();
+        bob.setId(2L);
+        bob.setUsername("bob");
+        when(userRepository.findByUsername("bob")).thenReturn(Optional.of(bob));
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(documentRepository.findById(1L)).thenReturn(Optional.of(document));
+
+        assertThatThrownBy(() -> documentService.deleteOwnDocument(1L, "bob")).isInstanceOf(ForbiddenException.class);
+
+        com.eduquest.api.entity.Role admin = new com.eduquest.api.entity.Role();
+        admin.setName(com.eduquest.api.entity.RoleName.ROLE_ADMIN);
+        bob.getRoles().add(admin);
+        documentService.deleteOwnDocument(1L, "bob");
+        documentService.deleteOwnDocument(1L, "alice");
+
+        verify(reviewRepository, org.mockito.Mockito.times(2)).deleteByDocumentId(1L);
+        verify(fileStorageService, org.mockito.Mockito.times(2)).deleteByUrl("https://cloud.example/calculo.pdf");
+    }
+
+    @Test
+    void setFeatured_onlyPublicMaterials() {
+        when(documentRepository.findById(1L)).thenReturn(Optional.of(document));
+        when(documentRepository.save(any(Document.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        assertThat(documentService.setFeatured(1L, true).isFeatured()).isTrue();
+        assertThat(documentService.setFeatured(1L, false).isFeatured()).isFalse();
+
+        document.setGroup(group);
+        assertThatThrownBy(() -> documentService.setFeatured(1L, true))
+                .isInstanceOf(com.eduquest.api.exception.InvalidOperationException.class);
+    }
+
+    @Test
+    void getFeaturedDocuments_mapsRepositoryResult() {
+        document.setFeatured(true);
+        when(documentRepository.findTop6ByFeaturedTrueAndGroupIsNullOrderByUploadedAtDesc()).thenReturn(List.of(document));
+
+        assertThat(documentService.getFeaturedDocuments()).extracting(DocumentResponseDTO::isFeatured).containsExactly(true);
+    }
+
+    @Test
+    void getPublicDocumentsByAuthor_returnsPageOrThrowsForUnknownUser() {
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(0, 6);
+        when(userRepository.existsById(1L)).thenReturn(true);
+        when(documentRepository.findByAuthorIdAndGroupIsNull(1L, pageable))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(document), pageable, 1));
+
+        assertThat(documentService.getPublicDocumentsByAuthor(1L, pageable).content())
+                .extracting("title").containsExactly("Apuntes de Calculo");
+
+        when(userRepository.existsById(9L)).thenReturn(false);
+        assertThatThrownBy(() -> documentService.getPublicDocumentsByAuthor(9L, pageable))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 }

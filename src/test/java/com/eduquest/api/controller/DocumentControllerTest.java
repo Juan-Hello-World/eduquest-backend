@@ -117,4 +117,25 @@ class DocumentControllerTest {
         org.mockito.Mockito.verify(documentService).saveDocument(1L, "alice");
         org.mockito.Mockito.verify(documentService).unsaveDocument(1L, "alice");
     }
+
+    @Test
+    void updateAndDeleteDocument_delegateToService() {
+        org.springframework.security.core.Authentication authentication =
+                org.mockito.Mockito.mock(org.springframework.security.core.Authentication.class);
+        org.mockito.Mockito.when(authentication.getName()).thenReturn("alice");
+        DocumentRequestDTO request = new DocumentRequestDTO();
+        org.mockito.Mockito.when(documentService.updateDocument(1L, request, "alice")).thenReturn(response());
+
+        assertThat(documentController.updateDocument(1L, request, authentication).getBody().getTitle()).isEqualTo("Apuntes");
+        assertThat(documentController.deleteDocument(1L, authentication).getStatusCode())
+                .isEqualTo(org.springframework.http.HttpStatus.NO_CONTENT);
+        org.mockito.Mockito.verify(documentService).deleteOwnDocument(1L, "alice");
+    }
+
+    @Test
+    void getFeaturedDocuments_returnsList() {
+        org.mockito.Mockito.when(documentService.getFeaturedDocuments()).thenReturn(List.of(response()));
+
+        assertThat(documentController.getFeaturedDocuments().getBody()).hasSize(1);
+    }
 }

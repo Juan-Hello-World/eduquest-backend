@@ -36,6 +36,11 @@ class AdminServiceImplTest {
 
     @Mock UserRepository userRepository;
     @Mock RoleRepository roleRepository;
+    @Mock com.eduquest.api.service.NotificationService notificationService;
+    @Mock com.eduquest.api.repository.DocumentRepository documentRepository;
+    @Mock com.eduquest.api.repository.PrivateGroupRepository groupRepository;
+    @Mock com.eduquest.api.repository.StudySessionRepository sessionRepository;
+    @Mock com.eduquest.api.repository.ReportRepository reportRepository;
 
     @InjectMocks AdminServiceImpl adminService;
 
@@ -48,6 +53,17 @@ class AdminServiceImplTest {
         user.setUsername("alice");
         user.setEmail("alice@utec.edu.pe");
         user.setRoles(new java.util.HashSet<>(Set.of(new Role(1L, RoleName.ROLE_USER))));
+        when(userRepository.findByUsername("admin")).thenReturn(Optional.of(moderator(9L, "admin", RoleName.ROLE_ADMIN)));
+        when(userRepository.findByUsername("gestor")).thenReturn(Optional.of(moderator(8L, "gestor", RoleName.ROLE_MANAGER)));
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+    }
+
+    private static User moderator(Long id, String username, RoleName role) {
+        User moderator = new User();
+        moderator.setId(id);
+        moderator.setUsername(username);
+        moderator.setRoles(new java.util.HashSet<>(Set.of(new Role(id, role))));
+        return moderator;
     }
 
     @Test
@@ -111,7 +127,7 @@ class AdminServiceImplTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         when(userRepository.save(user)).thenReturn(user);
 
-        UserResponseDTO dto = adminService.banUser(1L, "  Publicó material ofensivo  ", "admin");
+        UserResponseDTO dto = adminService.banUser(1L, "  Publicó material ofensivo  ", null, "admin");
 
         assertThat(dto.isBanned()).isTrue();
         assertThat(dto.getBanReason()).isEqualTo("Publicó material ofensivo");
@@ -122,7 +138,7 @@ class AdminServiceImplTest {
     void banUser_ownAccount_throwsInvalidOperation() {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
 
-        assertThatThrownBy(() -> adminService.banUser(1L, "Motivo de prueba", "alice"))
+        assertThatThrownBy(() -> adminService.banUser(1L, "Motivo de prueba", null, "alice"))
                 .isInstanceOf(InvalidOperationException.class);
     }
 
@@ -131,7 +147,7 @@ class AdminServiceImplTest {
         user.setRoles(new java.util.HashSet<>(Set.of(new Role(3L, RoleName.ROLE_ADMIN))));
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
 
-        assertThatThrownBy(() -> adminService.banUser(1L, "Motivo de prueba", "admin"))
+        assertThatThrownBy(() -> adminService.banUser(1L, "Motivo de prueba", null, "admin"))
                 .isInstanceOf(InvalidOperationException.class);
     }
 
@@ -148,5 +164,63 @@ class AdminServiceImplTest {
         assertThat(dto.isBanned()).isFalse();
         assertThat(dto.getBanReason()).isNull();
         assertThat(dto.getBannedAt()).isNull();
+    }
+
+    @Test
+    void banUser_managerCanOnlySuspendStudentsTemporarily() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(userRepository.save(user)).thenReturn(user);
+
+        assertThatThrownBy(() -> adminService.banUser(1L, "Motivo de prueba", null, "gestor"))
+                .isInstanceOf(com.eduquest.api.exception.ForbiddenException.class);
+        assertThatThrownBy(() -> adminService.banUser(1L, "Motivo de prueba", 10, "gestor"))
+                .isInstanceOf(com.eduquest.api.exception.ForbiddenException.class);
+
+        UserResponseDTO dto = adminService.banUser(1L, "Motivo de prueba", 3, "gestor");
+        assertThat(dto.isBanned()).isTrue();
+        assertThat(dto.getBannedUntil()).isAfter(java.time.LocalDateTime.now().plusDays(2));
+
+        user.setRoles(new java.util.HashSet<>(Set.of(new Role(2L, RoleName.ROLE_MANAGER))));
+        assertThatThrownBy(() -> adminService.banUser(1L, "Motivo de prueba", 1, "gestor"))
+                .isInstanceOf(com.eduquest.api.exception.ForbiddenException.class);
+    }
+
+    @Test
+    void suspension_expiresByItself() {
+        user.setBanned(true);
+        user.setBannedUntil(java.time.LocalDateTime.now().minusMinutes(1));
+        assertThat(user.isBanned()).isFalse();
+        user.setBannedUntil(java.time.LocalDateTime.now().plusDays(1));
+        assertThat(user.isBanned()).isTrue();
+    }
+
+    @Test
+    void warnUser_sendsNotification() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        adminService.warnUser(1L, "Evita publicar spam en los grupos", "gestor");
+
+        org.mockito.Mockito.verify(notificationService).notifyWarning(user, "Evita publicar spam en los grupos");
+        assertThatThrownBy(() -> adminService.warnUser(1L, "Mensaje de prueba", "alice"))
+                .isInstanceOf(InvalidOperationException.class);
+    }
+
+    @Test
+    void getStats_collectsCounters() {
+        when(userRepository.count()).thenReturn(13L);
+        when(userRepository.countByCreatedAtAfter(org.mockito.ArgumentMatchers.any())).thenReturn(2L);
+        when(userRepository.countSuspended()).thenReturn(1L);
+        when(documentRepository.count()).thenReturn(9L);
+        when(documentRepository.countByUploadedAtAfter(org.mockito.ArgumentMatchers.any())).thenReturn(3L);
+        when(groupRepository.count()).thenReturn(7L);
+        when(sessionRepository.countByCreatedAtAfter(org.mockito.ArgumentMatchers.any())).thenReturn(4L);
+        when(reportRepository.countByStatus(com.eduquest.api.entity.ReportStatus.OPEN)).thenReturn(5L);
+
+        com.eduquest.api.dto.response.AdminStatsDTO stats = adminService.getStats();
+
+        assertThat(stats.users()).isEqualTo(13);
+        assertThat(stats.newUsersThisWeek()).isEqualTo(2);
+        assertThat(stats.openReports()).isEqualTo(5);
+        assertThat(stats.sessionsThisWeek()).isEqualTo(4);
     }
 }

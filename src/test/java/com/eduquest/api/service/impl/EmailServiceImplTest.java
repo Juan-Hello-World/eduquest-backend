@@ -61,4 +61,13 @@ class EmailServiceImplTest {
         verify(mailSender).createMimeMessage();
         verify(mailSender).send(any(MimeMessage.class));
     }
+
+    @Test
+    void sendVerificationAndAppealEmails_renderAndSend() {
+        emailService.sendVerificationCode("alice@utec.edu.pe", "alice", "123456");
+        emailService.sendAppealDecision("bob@utec.edu.pe", "bob", true, null);
+        emailService.sendAppealDecision("bob@utec.edu.pe", "bob", false, "Se mantiene");
+
+        verify(mailSender, org.mockito.Mockito.times(3)).send(any(MimeMessage.class));
+    }
 }

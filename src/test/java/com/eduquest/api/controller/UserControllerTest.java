@@ -95,4 +95,24 @@ class UserControllerTest {
                 .isEqualTo(org.springframework.http.HttpStatus.NO_CONTENT);
         verify(userService).changePassword("alice", "actual123", "nueva123");
     }
+
+    @Test
+    void profileAndFollowEndpoints_delegateToService() {
+        com.eduquest.api.dto.response.PublicProfileDTO profile = new com.eduquest.api.dto.response.PublicProfileDTO(
+                2L, "bob", null, false, null, 0, 0, null, null, List.of(), 0, 0, false, false);
+        when(userService.getPublicProfile("alice", 2L)).thenReturn(profile);
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(0, 6);
+        com.eduquest.api.dto.response.PageResponseDTO<com.eduquest.api.dto.response.DocumentResponseDTO> page =
+                com.eduquest.api.dto.response.PageResponseDTO.of(List.of(), 0, 6, 0);
+        when(userService.getPublicDocuments(2L, pageable)).thenReturn(page);
+        when(userService.getFollowing("alice")).thenReturn(List.of());
+
+        assertThat(userController.getPublicProfile(2L, principal).getBody()).isSameAs(profile);
+        assertThat(userController.getPublicDocuments(2L, pageable).getBody()).isSameAs(page);
+        assertThat(userController.getFollowing(principal).getBody()).isEmpty();
+        assertThat(userController.follow(2L, principal).getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(userController.unfollow(2L, principal).getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        verify(userService).follow("alice", 2L);
+        verify(userService).unfollow("alice", 2L);
+    }
 }

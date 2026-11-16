@@ -191,4 +191,18 @@ class StudyPlanServiceImplTest {
         assertThatThrownBy(() -> studyPlanService.updateProgress(3L, request, "alice"))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
+
+    @Test
+    void deletePlan_ownPlanOnly() {
+        com.eduquest.api.entity.StudyPlan plan = new com.eduquest.api.entity.StudyPlan();
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(studyPlanRepository.findByIdAndUserId(3L, 1L)).thenReturn(Optional.of(plan));
+        when(studyPlanRepository.findByIdAndUserId(4L, 1L)).thenReturn(Optional.empty());
+
+        studyPlanService.deletePlan(3L, "alice");
+
+        verify(studyPlanRepository).delete(plan);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> studyPlanService.deletePlan(4L, "alice"))
+                .isInstanceOf(com.eduquest.api.exception.ResourceNotFoundException.class);
+    }
 }

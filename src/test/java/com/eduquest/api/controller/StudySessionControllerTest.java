@@ -115,6 +115,8 @@ class StudySessionControllerTest {
 
         assertThat(studySessionController.attend(1L, 5L, authentication).getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(studySessionController.cancelAttendance(1L, 5L, authentication).getStatusCode()).isEqualTo(HttpStatus.OK);
+        when(sessionService.checkIn(1L, 5L, "alice")).thenReturn(response());
+        assertThat(studySessionController.checkIn(1L, 5L, authentication).getBody()).isNotNull();
         assertThat(studySessionController.getReviews(1L, 5L, authentication).getBody()).hasSize(1);
         assertThat(studySessionController.reviewSession(1L, 5L, new SessionReviewRequestDTO(), authentication)
                 .getStatusCode()).isEqualTo(HttpStatus.CREATED);

@@ -49,6 +49,8 @@ class AuthServiceImplTest {
     @Mock PasswordEncoder passwordEncoder;
     @Mock JwtService jwtService;
     @Mock ApplicationEventPublisher eventPublisher;
+    @Mock com.eduquest.api.security.LoginAttemptService loginAttemptService;
+    @Mock com.eduquest.api.service.EmailVerificationService emailVerificationService;
 
     @InjectMocks AuthServiceImpl authService;
 
@@ -69,6 +71,7 @@ class AuthServiceImplTest {
 
         when(jwtService.generateAccessToken(any(UserPrincipal.class))).thenReturn("access-token");
         when(jwtService.generateRefreshToken(any(UserPrincipal.class))).thenReturn("refresh-token");
+        when(loginAttemptService.remainingAttempts(any())).thenReturn(5);
     }
 
     @Test
@@ -226,5 +229,42 @@ class AuthServiceImplTest {
 
         assertThatThrownBy(() -> authService.refreshToken("refresh"))
                 .isInstanceOf(UserBannedException.class);
+    }
+
+    @Test
+    void authenticateUser_wrongPassword_recordsFailureAndWarnsWhenFewAttemptsLeft() {
+        when(authenticationManager.authenticate(any())).thenThrow(new org.springframework.security.authentication.BadCredentialsException("x"));
+        when(loginAttemptService.remainingAttempts("alice")).thenReturn(2);
+        LoginRequestDTO request = new LoginRequestDTO();
+        request.setUsername("alice");
+        request.setPassword("mala");
+
+        assertThatThrownBy(() -> authService.authenticateUser(request))
+                .isInstanceOf(InvalidCredentialsException.class)
+                .hasMessageContaining("quedan 2 intentos");
+        verify(loginAttemptService).recordFailure("alice");
+
+        when(loginAttemptService.remainingAttempts("alice")).thenReturn(1);
+        assertThatThrownBy(() -> authService.authenticateUser(request)).hasMessageContaining("queda 1 intento");
+    }
+
+    @Test
+    void registerUser_withVerificationEnabled_sendsCodeAndMarksUnverified() {
+        when(emailVerificationService.isEnabled()).thenReturn(true);
+        when(roleRepository.findByName(RoleName.ROLE_USER)).thenReturn(Optional.of(role));
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
+            User saved = invocation.getArgument(0);
+            saved.setId(5L);
+            return saved;
+        });
+        RegisterRequestDTO request = new RegisterRequestDTO();
+        request.setUsername("nuevo");
+        request.setEmail("nuevo@utec.edu.pe");
+        request.setPassword("secreto123");
+
+        AuthResponseDTO response = authService.registerUser(request);
+
+        assertThat(response.isEmailVerified()).isFalse();
+        verify(emailVerificationService).sendCode(any(User.class));
     }
 }

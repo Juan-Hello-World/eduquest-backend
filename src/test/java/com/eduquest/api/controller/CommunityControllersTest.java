@@ -43,6 +43,7 @@ class CommunityControllersTest {
     @Mock GamificationService gamificationService;
     @Mock com.eduquest.api.service.NotificationService notificationService;
     @Mock com.eduquest.api.service.DirectMessageService directMessageService;
+    @Mock com.eduquest.api.service.AdminService adminService;
 
     private Authentication authentication;
 
@@ -55,13 +56,21 @@ class CommunityControllersTest {
     @Test
     void groupMessageController_listsAndSends() {
         GroupMessageController controller = new GroupMessageController(messageService);
-        when(messageService.getMessages(1L, "alice", 4L, null)).thenReturn(List.of(new GroupMessageResponseDTO()));
+        when(messageService.getMessages(1L, "alice", null, 4L, null, null)).thenReturn(List.of(new GroupMessageResponseDTO()));
         when(messageService.sendMessage(eq(1L), any(GroupMessageRequestDTO.class), eq("alice")))
                 .thenReturn(new GroupMessageResponseDTO());
 
-        assertThat(controller.getMessages(1L, 4L, null, authentication).getBody()).hasSize(1);
+        assertThat(controller.getMessages(1L, null, 4L, null, null, authentication).getBody()).hasSize(1);
         assertThat(controller.sendMessage(1L, new GroupMessageRequestDTO(), authentication).getStatusCode())
                 .isEqualTo(HttpStatus.CREATED);
+
+        GroupMessageResponseDTO edited = new GroupMessageResponseDTO();
+        com.eduquest.api.dto.request.EditMessageRequestDTO edit = new com.eduquest.api.dto.request.EditMessageRequestDTO();
+        edit.setContent("Corregido");
+        when(messageService.editMessage(1L, 9L, "Corregido", "alice")).thenReturn(edited);
+        when(messageService.deleteMessage(1L, 9L, "alice")).thenReturn(edited);
+        assertThat(controller.editMessage(1L, 9L, edit, authentication).getBody()).isSameAs(edited);
+        assertThat(controller.deleteMessage(1L, 9L, authentication).getBody()).isSameAs(edited);
     }
 
     @Test
@@ -75,7 +84,7 @@ class CommunityControllersTest {
 
     @Test
     void moderationController_listsCountsClosesAndDeletes() {
-        ModerationController controller = new ModerationController(reportService, documentService, notificationService);
+        ModerationController controller = new ModerationController(reportService, documentService, notificationService, adminService);
         when(reportService.getReports(eq("OPEN"), any(Pageable.class)))
                 .thenReturn(new PageResponseDTO<>(List.of(new ReportResponseDTO()), 0, 10, 1, 1));
         when(reportService.countOpenReports()).thenReturn(3L);
@@ -94,7 +103,7 @@ class CommunityControllersTest {
     void gamificationController_returnsProfileAndLeaderboard() {
         GamificationController controller = new GamificationController(gamificationService);
         GamificationProfileDTO profile = new GamificationProfileDTO(10, 5, 1,
-                new GamificationStatsDTO(1, 0, 0, 0, 0), List.of());
+                new GamificationStatsDTO(1, 0, 0, 0, 0, 0, 0), List.of());
         when(gamificationService.getProfile("alice")).thenReturn(profile);
         when(gamificationService.getLeaderboard("week"))
                 .thenReturn(List.of(new LeaderboardEntryDTO(1, 1L, "alice", null, false, 10)));
@@ -105,7 +114,7 @@ class CommunityControllersTest {
 
     @Test
     void moderationController_announce_returnsRecipients() {
-        ModerationController controller = new ModerationController(reportService, documentService, notificationService);
+        ModerationController controller = new ModerationController(reportService, documentService, notificationService, adminService);
         com.eduquest.api.dto.request.AnnouncementRequestDTO request = new com.eduquest.api.dto.request.AnnouncementRequestDTO();
         when(notificationService.announce(request)).thenReturn(4);
 
@@ -138,8 +147,13 @@ class CommunityControllersTest {
         when(directMessageService.getMessages("alice", 2L, null, null)).thenReturn(List.of());
         GroupMessageRequestDTO request = new GroupMessageRequestDTO();
         request.setContent("Hola");
-        when(directMessageService.sendMessage("alice", 2L, "Hola")).thenReturn(
-                new com.eduquest.api.dto.response.DirectMessageResponseDTO(1L, "Hola", 1L, true, false, java.time.LocalDateTime.now()));
+        com.eduquest.api.dto.response.DirectMessageResponseDTO sent = new com.eduquest.api.dto.response.DirectMessageResponseDTO(
+                1L, "Hola", null, null, null, null, 1L, true, false, java.time.LocalDateTime.now(), null, false, null);
+        when(directMessageService.sendMessage("alice", 2L, request)).thenReturn(sent);
+        when(directMessageService.editMessage("alice", 2L, 1L, "Hola!")).thenReturn(sent);
+        when(directMessageService.deleteMessage("alice", 2L, 1L)).thenReturn(sent);
+        com.eduquest.api.dto.request.EditMessageRequestDTO edit = new com.eduquest.api.dto.request.EditMessageRequestDTO();
+        edit.setContent("Hola!");
 
         assertThat(controller.getConversations(authentication).getBody()).isEmpty();
         assertThat(controller.countUnread(authentication).getBody()).containsEntry("count", 1L);
@@ -147,6 +161,8 @@ class CommunityControllersTest {
         assertThat(controller.getUser(2L).getBody()).isEqualTo(bob);
         assertThat(controller.getMessages(2L, null, null, authentication).getBody()).isEmpty();
         assertThat(controller.sendMessage(2L, request, authentication).getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(controller.editMessage(2L, 1L, edit, authentication).getBody()).isSameAs(sent);
+        assertThat(controller.deleteMessage(2L, 1L, authentication).getBody()).isSameAs(sent);
         assertThat(controller.markRead(2L, authentication).getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
         verify(directMessageService).markRead("alice", 2L);
     }
@@ -157,5 +173,16 @@ class CommunityControllersTest {
 
         assertThat(controller.markSeen(1L, authentication).getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
         verify(messageService).markChatSeen(1L, "alice");
+    }
+
+    @Test
+    void moderationController_statsAndFeatured() {
+        ModerationController controller = new ModerationController(reportService, documentService, notificationService, adminService);
+        com.eduquest.api.dto.response.AdminStatsDTO stats = new com.eduquest.api.dto.response.AdminStatsDTO(1, 0, 0, 2, 0, 1, 0, 0);
+        when(adminService.getStats()).thenReturn(stats);
+        when(documentService.setFeatured(3L, true)).thenReturn(new com.eduquest.api.dto.response.DocumentResponseDTO());
+
+        assertThat(controller.getStats().getBody()).isEqualTo(stats);
+        assertThat(controller.setFeatured(3L, true).getStatusCode()).isEqualTo(HttpStatus.OK);
     }
 }

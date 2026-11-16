@@ -229,4 +229,20 @@ class GroupControllerTest {
 
         assertThat(groupController.joinGroup(1L, request, authentication).getStatusCode()).isEqualTo(HttpStatus.OK);
     }
+
+    @Test
+    void manageGroupEndpoints_delegateToService() {
+        Authentication authentication = mock(Authentication.class);
+        when(authentication.getName()).thenReturn("alice");
+        com.eduquest.api.dto.request.GroupUpdateRequestDTO request = new com.eduquest.api.dto.request.GroupUpdateRequestDTO();
+        when(groupService.updateGroup(1L, request, "alice")).thenReturn(response());
+
+        assertThat(groupController.updateGroup(1L, request, authentication).getBody().getName()).isEqualTo("Grupo de Calculo");
+        assertThat(groupController.deleteGroup(1L, authentication).getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(groupController.leaveGroup(1L, authentication).getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(groupController.removeMember(1L, 2L, authentication).getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        org.mockito.Mockito.verify(groupService).deleteGroup(1L, "alice");
+        org.mockito.Mockito.verify(groupService).leaveGroup(1L, "alice");
+        org.mockito.Mockito.verify(groupService).removeMember(1L, 2L, "alice");
+    }
 }

@@ -36,3 +36,7 @@ gemini:
 admin:
   initial:
     password: admin123
+
+app:
+  email-verification:
+    enabled: false

@@ -82,4 +82,15 @@ class StudyPlanControllerTest {
 
         assertThat(studyPlanController.updateProgress(3L, request, authentication).getBody().getId()).isEqualTo(3L);
     }
+
+    @Test
+    void deletePlan_returnsNoContent() {
+        org.springframework.security.core.Authentication authentication =
+                org.mockito.Mockito.mock(org.springframework.security.core.Authentication.class);
+        org.mockito.Mockito.when(authentication.getName()).thenReturn("alice");
+
+        assertThat(studyPlanController.deletePlan(5L, authentication).getStatusCode())
+                .isEqualTo(org.springframework.http.HttpStatus.NO_CONTENT);
+        org.mockito.Mockito.verify(studyPlanService).deletePlan(5L, "alice");
+    }
 }

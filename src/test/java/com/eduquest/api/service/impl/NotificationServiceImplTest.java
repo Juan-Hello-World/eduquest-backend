@@ -41,6 +41,8 @@ class NotificationServiceImplTest {
     @Mock NotificationRepository notificationRepository;
     @Mock UserRepository userRepository;
     @Mock PrivateGroupRepository groupRepository;
+    @Mock com.eduquest.api.repository.GroupVisitRepository visitRepository;
+    @Mock org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     @InjectMocks NotificationServiceImpl notificationService;
 
@@ -200,5 +202,94 @@ class NotificationServiceImplTest {
         when(userRepository.findByUsername("ghost")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> notificationService.countUnread("ghost")).isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void notifyWarning_savesModerationNotice() {
+        notificationService.notifyWarning(alice, "  Evita el spam  ");
+
+        ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationRepository).save(captor.capture());
+        assertThat(captor.getValue().getTitle()).isEqualTo("Advertencia de la moderación");
+        assertThat(captor.getValue().getBody()).isEqualTo("Evita el spam");
+    }
+
+    @Test
+    void notifyFollowers_notifiesEachFollowerWithProfileLink() {
+        User bob = user(2L, "bob");
+        when(userRepository.findFollowers(1L)).thenReturn(List.of(bob));
+
+        notificationService.notifyFollowers(1L, "Apuntes de Física");
+
+        List<Notification> saved = savedBatch();
+        assertThat(saved).hasSize(1);
+        assertThat(saved.get(0).getRecipient()).isEqualTo(bob);
+        assertThat(saved.get(0).getTitle()).contains("@alice");
+        assertThat(saved.get(0).getLink()).isEqualTo("/users/1");
+    }
+
+    @Test
+    void notifyFollowers_unknownAuthor_doesNothing() {
+        when(userRepository.findById(99L)).thenReturn(Optional.empty());
+
+        notificationService.notifyFollowers(99L, "X");
+
+        verify(notificationRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    void notifyAppealDecision_includesModeratorResponse() {
+        notificationService.notifyAppealDecision(alice, false, " Reincidencia ");
+        notificationService.notifyAppealDecision(alice, true, null);
+
+        ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationRepository, org.mockito.Mockito.times(2)).save(captor.capture());
+        assertThat(captor.getAllValues().get(0).getBody()).contains("Reincidencia");
+        assertThat(captor.getAllValues().get(1).getTitle()).isEqualTo("Aceptamos tu apelación");
+    }
+
+    @Test
+    void notifyForumActivity_linksToQuestion() {
+        notificationService.notifyForumActivity(alice, "@bob respondió tu pregunta", "Integrales", 4L);
+
+        ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationRepository).save(captor.capture());
+        assertThat(captor.getValue().getLink()).isEqualTo("/forum/4");
+        assertThat(captor.getValue().getBody()).isEqualTo("«Integrales»");
+    }
+
+    @Test
+    void savedNotifications_publishPushEvent() {
+        notificationService.notifyWarning(alice, "Cuidado con el spam");
+
+        ArgumentCaptor<com.eduquest.api.event.OnPushEvent> captor =
+                ArgumentCaptor.forClass(com.eduquest.api.event.OnPushEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        assertThat(captor.getValue().getMessages()).singleElement()
+                .satisfies(message -> assertThat(message.userId()).isEqualTo(1L));
+    }
+
+    @Test
+    void notifyGroupActivity_skipsMutedMembers() {
+        when(visitRepository.findMutedUserIds(5L)).thenReturn(List.of(2L));
+
+        notificationService.notifyGroupActivity(5L, 1L, NotificationType.GROUP_SESSION, "Repaso");
+
+        verify(notificationRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    void notifyMention_linksToTheChannel() {
+        com.eduquest.api.entity.GroupChannel channel = new com.eduquest.api.entity.GroupChannel();
+        channel.setId(4L);
+        channel.setName("dudas");
+
+        notificationService.notifyMention(bob, alice, group, channel, 9L, "Hola @bob");
+
+        ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationRepository).save(captor.capture());
+        assertThat(captor.getValue().getTitle()).isEqualTo("@alice te mencionó en Cálculo");
+        assertThat(captor.getValue().getBody()).isEqualTo("#dudas: Hola @bob");
+        assertThat(captor.getValue().getLink()).isEqualTo("/groups/5?tab=chat&channel=4&message=9");
     }
 }

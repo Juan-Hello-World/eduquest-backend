@@ -120,4 +120,44 @@ class JwtAuthorizationFilterTest {
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
         org.mockito.Mockito.verifyNoInteractions(chain);
     }
+
+    @Test
+    void unverifiedUser_isReadOnlyExceptForAllowedPaths() throws Exception {
+        com.eduquest.api.entity.User user = new com.eduquest.api.entity.User();
+        user.setId(1L);
+        user.setUsername("alice");
+        user.setEmail("alice@utec.edu.pe");
+        user.setPassword("x");
+        user.setEmailVerified(false);
+        UserPrincipal principal = UserPrincipal.build(user);
+        when(jwtService.isValidToken("tok")).thenReturn(true);
+        when(jwtService.getTokenType("tok")).thenReturn("access");
+        when(jwtService.extractUsername("tok")).thenReturn("alice");
+        when(userDetailsService.loadUserByUsername("alice")).thenReturn(principal);
+
+        MockHttpServletRequest post = new MockHttpServletRequest("POST", "/api/v1/documents");
+        post.addHeader("Authorization", "Bearer tok");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = mock(FilterChain.class);
+        filter.doFilter(post, response, chain);
+
+        assertThat(response.getStatus()).isEqualTo(403);
+        assertThat(response.getContentAsString()).contains("EMAIL_NOT_VERIFIED");
+        verify(chain, never()).doFilter(post, response);
+
+        SecurityContextHolder.clearContext();
+        MockHttpServletRequest verify = new MockHttpServletRequest("POST", "/api/v1/users/me/verify-email");
+        verify.addHeader("Authorization", "Bearer tok");
+        MockHttpServletResponse ok = new MockHttpServletResponse();
+        filter.doFilter(verify, ok, chain);
+        verify(chain).doFilter(verify, ok);
+
+        assertThat(JwtAuthorizationFilter.requiresVerifiedEmail(new MockHttpServletRequest("GET", "/api/v1/documents"))).isFalse();
+        assertThat(JwtAuthorizationFilter.requiresVerifiedEmail(new MockHttpServletRequest("POST", "/api/v1/groups/1/seen"))).isFalse();
+        assertThat(JwtAuthorizationFilter.requiresVerifiedEmail(new MockHttpServletRequest("POST", "/api/v1/conversations/2/read"))).isFalse();
+        assertThat(JwtAuthorizationFilter.requiresVerifiedEmail(new MockHttpServletRequest("PATCH", "/api/v1/notifications/1/read"))).isFalse();
+        assertThat(JwtAuthorizationFilter.requiresVerifiedEmail(new MockHttpServletRequest("POST", "/api/v1/auth/login"))).isFalse();
+        assertThat(JwtAuthorizationFilter.requiresVerifiedEmail(new MockHttpServletRequest("HEAD", "/x"))).isFalse();
+        assertThat(JwtAuthorizationFilter.requiresVerifiedEmail(new MockHttpServletRequest("OPTIONS", "/x"))).isFalse();
+    }
 }

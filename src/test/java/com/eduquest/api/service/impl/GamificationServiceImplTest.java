@@ -62,7 +62,7 @@ class GamificationServiceImplTest {
         when(documentRepository.countByAuthorSince(any())).thenReturn(rows(new Object[]{1L, 2L}, new Object[]{3L, 9L}));
         when(reviewRepository.countByAuthorSince(any())).thenReturn(rows(new Object[]{2L, 3L}));
         when(sessionRepository.countByCreatorSince(any())).thenReturn(rows(new Object[]{2L, 1L}, new Object[]{null, 4L}));
-        when(attendanceRepository.countByUserSince(any())).thenReturn(rows(new Object[]{1L, 1L}));
+        when(attendanceRepository.countCheckInsByUserSince(any())).thenReturn(rows(new Object[]{1L, 1L}));
         when(sessionReviewRepository.countByAuthorSince(any())).thenReturn(List.of());
     }
 
@@ -83,7 +83,7 @@ class GamificationServiceImplTest {
         when(documentRepository.countByAuthorId(1L)).thenReturn(2L);
         when(reviewRepository.countByAuthorId(1L)).thenReturn(5L);
         when(sessionRepository.countByCreatedById(1L)).thenReturn(3L);
-        when(attendanceRepository.countByUserId(1L)).thenReturn(1L);
+        when(attendanceRepository.countByUserIdAndCheckedInAtIsNotNull(1L)).thenReturn(1L);
         when(sessionReviewRepository.countByAuthorId(1L)).thenReturn(0L);
         when(sessionReviewRepository.countBySessionCreatedById(1L)).thenReturn(3L);
         when(sessionReviewRepository.averageRatingForHost(1L)).thenReturn(4.7);
@@ -156,7 +156,7 @@ class GamificationServiceImplTest {
         when(documentRepository.countByAuthorSince(any())).thenReturn(List.of());
         when(reviewRepository.countByAuthorSince(any())).thenReturn(List.of());
         when(sessionRepository.countByCreatorSince(any())).thenReturn(List.of());
-        when(attendanceRepository.countByUserSince(any())).thenReturn(List.of());
+        when(attendanceRepository.countCheckInsByUserSince(any())).thenReturn(List.of());
 
         assertThat(gamificationService.getLeaderboard("week")).isEmpty();
     }
@@ -184,5 +184,33 @@ class GamificationServiceImplTest {
         gamificationService.syncBadges(9L);
 
         org.mockito.Mockito.verifyNoInteractions(notificationService);
+    }
+
+    @Test
+    void getProfile_noShowsSubtractButNeverBelowZero() {
+        when(documentRepository.countByAuthorSince(any())).thenReturn(List.of());
+        when(reviewRepository.countByAuthorSince(any())).thenReturn(List.of());
+        when(sessionRepository.countByCreatorSince(any())).thenReturn(List.of());
+        when(attendanceRepository.countCheckInsByUserSince(any())).thenReturn(List.of());
+        when(attendanceRepository.countConfirmedByUserSince(any())).thenReturn(rows(new Object[]{1L, 2L}));
+        when(attendanceRepository.countNoShowsByUserSince(any(), any())).thenReturn(rows(new Object[]{1L, 2L}));
+        when(attendanceRepository.countConfirmedByUserId(1L)).thenReturn(2L);
+        when(attendanceRepository.countNoShowsByUserId(org.mockito.ArgumentMatchers.eq(1L), any())).thenReturn(2L);
+
+        GamificationProfileDTO profile = gamificationService.getProfile("alice");
+
+        assertThat(profile.points()).isZero();
+        assertThat(profile.weeklyPoints()).isZero();
+        assertThat(profile.stats().noShows()).isEqualTo(2);
+    }
+
+    @Test
+    void getProfileById_usesSameCalculation() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(alice));
+
+        assertThat(gamificationService.getProfile(1L).badges()).hasSize(7);
+        when(userRepository.findById(9L)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> gamificationService.getProfile(9L))
+                .isInstanceOf(com.eduquest.api.exception.ResourceNotFoundException.class);
     }
 }

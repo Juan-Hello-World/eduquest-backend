@@ -71,4 +71,41 @@ class EventListenersTest {
         verify(notificationService).notifyDirectMessage(1L, 2L, "Hola");
         verify(gamificationService).syncBadges(1L);
     }
+
+    @Test
+    void accountEmailListener_sendsTheRightEmail() {
+        AccountEmailListener listener = new AccountEmailListener(emailService);
+
+        listener.handle(new OnAccountEmailEvent(new Object(), OnAccountEmailEvent.Kind.VERIFICATION_CODE,
+                "alice@utec.edu.pe", "alice", "123456"));
+        listener.handle(new OnAccountEmailEvent(new Object(), OnAccountEmailEvent.Kind.APPEAL_ACCEPTED,
+                "bob@utec.edu.pe", "bob", "Ok"));
+        listener.handle(new OnAccountEmailEvent(new Object(), OnAccountEmailEvent.Kind.APPEAL_REJECTED,
+                "bob@utec.edu.pe", "bob", null));
+
+        verify(emailService).sendVerificationCode("alice@utec.edu.pe", "alice", "123456");
+        verify(emailService).sendAppealDecision("bob@utec.edu.pe", "bob", true, "Ok");
+        verify(emailService).sendAppealDecision("bob@utec.edu.pe", "bob", false, null);
+    }
+
+    @Test
+    void notificationListener_notifiesFollowersOfPublicDocuments() {
+        NotificationListener listener = new NotificationListener(notificationService, gamificationService);
+
+        listener.handlePublicDocument(new OnPublicDocumentEvent(new Object(), 1L, "Apuntes"));
+
+        verify(notificationService).notifyFollowers(1L, "Apuntes");
+    }
+
+    @Test
+    void pushListener_sendsMessages() {
+        com.eduquest.api.service.PushNotificationService pushService =
+                org.mockito.Mockito.mock(com.eduquest.api.service.PushNotificationService.class);
+        PushListener listener = new PushListener(pushService);
+        OnPushEvent.PushMessage message = new OnPushEvent.PushMessage(1L, "Hola", "Cuerpo", "/forum/1");
+
+        listener.handle(new OnPushEvent(new Object(), java.util.List.of(message)));
+
+        verify(pushService).send(java.util.List.of(message));
+    }
 }

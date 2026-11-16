@@ -471,4 +471,106 @@ class StudySessionServiceImplTest {
         assertThat(dto.isCanReview()).isFalse();
         assertThat(dto.getAverageRating()).isNull();
     }
+
+    @Test
+    void scheduleSession_validatesEndTime() {
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(groupRepository.findById(1L)).thenReturn(Optional.of(group));
+        when(groupRepository.existsByIdAndMembersId(1L, 1L)).thenReturn(true);
+        when(sessionRepository.save(any(StudySession.class))).thenAnswer(inv -> inv.getArgument(0));
+        StudySessionRequestDTO req = new StudySessionRequestDTO();
+        req.setTitle("Repaso");
+        req.setScheduledAt(scheduled);
+        req.setMeetingUrl("https://meet.example/abc");
+
+        assertThat(studySessionService.scheduleSession(1L, req, "alice").getEndsAt()).isEqualTo(scheduled.plusHours(1));
+
+        req.setEndsAt(scheduled.plusMinutes(90));
+        assertThat(studySessionService.scheduleSession(1L, req, "alice").getEndsAt()).isEqualTo(scheduled.plusMinutes(90));
+
+        req.setEndsAt(scheduled.minusMinutes(5));
+        assertThatThrownBy(() -> studySessionService.scheduleSession(1L, req, "alice"))
+                .isInstanceOf(InvalidOperationException.class);
+
+        req.setEndsAt(scheduled.plusHours(9));
+        assertThatThrownBy(() -> studySessionService.scheduleSession(1L, req, "alice"))
+                .isInstanceOf(InvalidOperationException.class);
+    }
+
+    @Test
+    void checkIn_duringSession_registersAttendanceOnce() {
+        StudySession session = sessionHostedBy(user, LocalDateTime.now().minusMinutes(5));
+        session.setEndsAt(LocalDateTime.now().plusMinutes(55));
+        User bob = otherUser();
+        memberSetup(bob, session);
+
+        StudySessionResponseDTO dto = studySessionService.checkIn(1L, 5L, "bob");
+        studySessionService.checkIn(1L, 5L, "bob");
+
+        assertThat(dto.isCheckedIn()).isTrue();
+        assertThat(dto.getCheckedInCount()).isEqualTo(1);
+        assertThat(dto.getAttendeeCount()).isZero();
+        assertThat(dto.isCheckInOpen()).isTrue();
+        assertThat(session.getAttendances()).hasSize(1);
+        org.mockito.Mockito.verify(eventPublisher, org.mockito.Mockito.times(1)).publishEvent(any(com.eduquest.api.event.OnUserActivityEvent.class));
+    }
+
+    @Test
+    void checkIn_confirmedAttendeeKeepsConfirmation() {
+        StudySession session = sessionHostedBy(user, LocalDateTime.now().minusMinutes(1));
+        User bob = otherUser();
+        session.getAttendances().add(new com.eduquest.api.entity.SessionAttendance(session, bob, LocalDateTime.now().minusDays(1)));
+        memberSetup(bob, session);
+
+        StudySessionResponseDTO dto = studySessionService.checkIn(1L, 5L, "bob");
+
+        assertThat(dto.getAttendeeCount()).isEqualTo(1);
+        assertThat(dto.isAttending()).isTrue();
+        assertThat(dto.isCheckedIn()).isTrue();
+    }
+
+    @Test
+    void checkIn_outsideWindow_throwsInvalidOperation() {
+        memberSetup(otherUser(), sessionHostedBy(user, scheduled));
+        assertThatThrownBy(() -> studySessionService.checkIn(1L, 5L, "bob"))
+                .isInstanceOf(InvalidOperationException.class)
+                .hasMessageContaining("minutos antes");
+
+        memberSetup(otherUser(), sessionHostedBy(user, LocalDateTime.now().minusHours(3)));
+        assertThatThrownBy(() -> studySessionService.checkIn(1L, 5L, "bob"))
+                .isInstanceOf(InvalidOperationException.class)
+                .hasMessageContaining("terminó");
+    }
+
+    @Test
+    void getMySessions_returnsSessionsOfMyGroupsWithGroupId() {
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+        StudySession session = new StudySession();
+        session.setId(7L);
+        session.setTitle("Repaso");
+        session.setScheduledAt(scheduled);
+        session.setPrivateGroup(group);
+        session.setCreatedBy(user);
+        java.time.LocalDate from = java.time.LocalDate.now();
+        java.time.LocalDate to = from.plusDays(30);
+        when(sessionRepository.findForMemberBetween(1L, from.atStartOfDay(), to.atStartOfDay()))
+                .thenReturn(List.of(session));
+
+        List<StudySessionResponseDTO> result = studySessionService.getMySessions("alice", from, to);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getGroupId()).isEqualTo(1L);
+        assertThat(result.get(0).getGroupName()).isEqualTo("Grupo Calculo");
+    }
+
+    @Test
+    void getMySessions_invalidRange_throwsBadRequest() {
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+        java.time.LocalDate from = java.time.LocalDate.now();
+
+        assertThatThrownBy(() -> studySessionService.getMySessions("alice", from, from))
+                .isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> studySessionService.getMySessions("alice", from, from.plusDays(90)))
+                .isInstanceOf(BadRequestException.class);
+    }
 }

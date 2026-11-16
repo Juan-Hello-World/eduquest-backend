@@ -90,7 +90,7 @@ class AdminUserControllerTest {
         org.springframework.security.core.Authentication authentication =
                 org.mockito.Mockito.mock(org.springframework.security.core.Authentication.class);
         when(authentication.getName()).thenReturn("admin");
-        when(adminService.banUser(2L, "Incumplió las normas", "admin")).thenReturn(dto);
+        when(adminService.banUser(2L, "Incumplió las normas", null, "admin")).thenReturn(dto);
 
         com.eduquest.api.dto.request.BanUserRequestDTO request = new com.eduquest.api.dto.request.BanUserRequestDTO();
         request.setReason("Incumplió las normas");
@@ -111,5 +111,17 @@ class AdminUserControllerTest {
 
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(result.getBody().isBanned()).isFalse();
+    }
+
+    @Test
+    void warnUser_returnsNoContent() {
+        org.springframework.security.core.Authentication authentication =
+                org.mockito.Mockito.mock(org.springframework.security.core.Authentication.class);
+        when(authentication.getName()).thenReturn("gestor");
+        com.eduquest.api.dto.request.WarningRequestDTO request = new com.eduquest.api.dto.request.WarningRequestDTO();
+        request.setMessage("Evita publicar spam");
+
+        assertThat(adminUserController.warnUser(2L, request, authentication).getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        org.mockito.Mockito.verify(adminService).warnUser(2L, "Evita publicar spam", "gestor");
     }
 }
