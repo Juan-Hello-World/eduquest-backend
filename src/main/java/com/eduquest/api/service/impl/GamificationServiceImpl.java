@@ -8,6 +8,8 @@ import com.eduquest.api.dto.response.UserResponseDTO;
 import com.eduquest.api.entity.User;
 import com.eduquest.api.exception.ResourceNotFoundException;
 import com.eduquest.api.repository.DocumentRepository;
+import com.eduquest.api.repository.ForumAnswerRepository;
+import com.eduquest.api.repository.ForumVoteRepository;
 import com.eduquest.api.repository.ReviewRepository;
 import com.eduquest.api.repository.SessionAttendanceRepository;
 import com.eduquest.api.repository.SessionReviewRepository;
@@ -31,13 +33,16 @@ import java.util.stream.Collectors;
 @Service
 public class GamificationServiceImpl implements GamificationService {
 
-    static final int DOCUMENT_POINTS = 10;
-    static final int REVIEW_POINTS = 5;
-    static final int SESSION_POINTS = 8;
-    static final int CONFIRMATION_POINTS = 1;
-    static final int ATTENDANCE_POINTS = 3;
+    static final int DOCUMENT_POINTS = 5;
+    static final int WELL_RATED_DOCUMENT_POINTS = 3;
+    static final int HOSTED_SESSION_POINTS = 10;
+    static final int ATTENDANCE_POINTS = 5;
     static final int NO_SHOW_PENALTY = 3;
-    static final int SESSION_REVIEW_POINTS = 4;
+    static final int REVIEW_POINTS = 2;
+    static final int SESSION_REVIEW_POINTS = 2;
+    static final int ACCEPTED_ANSWER_POINTS = 8;
+    static final int UPVOTE_POINTS = 1;
+    static final int MAX_UPVOTES_PER_ANSWER = 5;
     private static final int LEADERBOARD_SIZE = 10;
     private static final LocalDateTime BEGINNING = LocalDateTime.of(2000, 1, 1, 0, 0);
 
@@ -48,6 +53,8 @@ public class GamificationServiceImpl implements GamificationService {
     private final SessionAttendanceRepository attendanceRepository;
     private final SessionReviewRepository sessionReviewRepository;
     private final StudyPlanRepository studyPlanRepository;
+    private final ForumAnswerRepository forumAnswerRepository;
+    private final ForumVoteRepository forumVoteRepository;
     private final NotificationService notificationService;
 
     public GamificationServiceImpl(UserRepository userRepository,
@@ -57,6 +64,8 @@ public class GamificationServiceImpl implements GamificationService {
                                    SessionAttendanceRepository attendanceRepository,
                                    SessionReviewRepository sessionReviewRepository,
                                    StudyPlanRepository studyPlanRepository,
+                                   ForumAnswerRepository forumAnswerRepository,
+                                   ForumVoteRepository forumVoteRepository,
                                    NotificationService notificationService) {
         this.userRepository = userRepository;
         this.documentRepository = documentRepository;
@@ -65,6 +74,8 @@ public class GamificationServiceImpl implements GamificationService {
         this.attendanceRepository = attendanceRepository;
         this.sessionReviewRepository = sessionReviewRepository;
         this.studyPlanRepository = studyPlanRepository;
+        this.forumAnswerRepository = forumAnswerRepository;
+        this.forumVoteRepository = forumVoteRepository;
         this.notificationService = notificationService;
     }
 
@@ -86,12 +97,12 @@ public class GamificationServiceImpl implements GamificationService {
         Long userId = user.getId();
         GamificationStatsDTO stats = statsFor(userId);
 
-        long points = Math.max(0, pointsFor(stats));
+        Map<Long, Long> allTime = pointsSince(BEGINNING);
+        long points = Math.max(0, allTime.getOrDefault(userId, 0L));
         long weeklyPoints = Math.max(0, pointsSince(LocalDateTime.now().minusDays(7)).getOrDefault(userId, 0L));
 
         Integer rank = null;
         if (points > 0) {
-            Map<Long, Long> allTime = pointsSince(BEGINNING);
             long ahead = allTime.entrySet().stream()
                     .filter(entry -> !entry.getKey().equals(userId) && entry.getValue() > points)
                     .count();
@@ -164,13 +175,23 @@ public class GamificationServiceImpl implements GamificationService {
     private Map<Long, Long> pointsSince(LocalDateTime since) {
         Map<Long, Long> points = new HashMap<>();
         addPoints(points, documentRepository.countByAuthorSince(since), DOCUMENT_POINTS);
+        addPoints(points, reviewRepository.countWellRatedByDocumentAuthorSince(since), WELL_RATED_DOCUMENT_POINTS);
         addPoints(points, reviewRepository.countByAuthorSince(since), REVIEW_POINTS);
-        addPoints(points, sessionRepository.countByCreatorSince(since), SESSION_POINTS);
-        addPoints(points, attendanceRepository.countConfirmedByUserSince(since), CONFIRMATION_POINTS);
+        addPoints(points, sessionRepository.countAttendedByCreatorSince(since), HOSTED_SESSION_POINTS);
         addPoints(points, attendanceRepository.countCheckInsByUserSince(since), ATTENDANCE_POINTS);
         addPoints(points, attendanceRepository.countNoShowsByUserSince(since, LocalDateTime.now()), -NO_SHOW_PENALTY);
         addPoints(points, sessionReviewRepository.countByAuthorSince(since), SESSION_REVIEW_POINTS);
+        addPoints(points, forumAnswerRepository.countAcceptedByAuthorSince(since), ACCEPTED_ANSWER_POINTS);
+        addPoints(points, capped(forumVoteRepository.countUpvotesPerAnswerSince(since)), UPVOTE_POINTS);
         return points;
+    }
+
+    private static List<Object[]> capped(List<Object[]> rows) {
+        return rows.stream()
+                .map(row -> row[1] instanceof Number count
+                        ? new Object[]{row[0], Math.min(count.longValue(), MAX_UPVOTES_PER_ANSWER)}
+                        : row)
+                .toList();
     }
 
     private static void addPoints(Map<Long, Long> points, List<Object[]> rows, int weight) {
@@ -179,16 +200,6 @@ public class GamificationServiceImpl implements GamificationService {
                 points.merge(userId, count.longValue() * weight, Long::sum);
             }
         }
-    }
-
-    private static long pointsFor(GamificationStatsDTO stats) {
-        return stats.documents() * DOCUMENT_POINTS
-                + stats.reviews() * REVIEW_POINTS
-                + stats.sessionsHosted() * SESSION_POINTS
-                + stats.confirmations() * CONFIRMATION_POINTS
-                + stats.attendances() * ATTENDANCE_POINTS
-                - stats.noShows() * NO_SHOW_PENALTY
-                + stats.sessionReviews() * SESSION_REVIEW_POINTS;
     }
 
     private List<BadgeDTO> badgesFor(User user, GamificationStatsDTO stats) {

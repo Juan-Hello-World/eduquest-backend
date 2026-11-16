@@ -22,4 +22,8 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
 
     @Query("SELECT r.author.id, COUNT(r) FROM Review r WHERE r.createdAt >= :since GROUP BY r.author.id")
     List<Object[]> countByAuthorSince(@Param("since") LocalDateTime since);
+
+    @Query("SELECT r.document.author.id, COUNT(r) FROM Review r WHERE r.rating >= 4"
+            + " AND r.author.id <> r.document.author.id AND r.createdAt >= :since GROUP BY r.document.author.id")
+    List<Object[]> countWellRatedByDocumentAuthorSince(@Param("since") LocalDateTime since);
 }

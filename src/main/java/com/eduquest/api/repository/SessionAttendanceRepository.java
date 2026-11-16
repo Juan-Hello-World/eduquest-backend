@@ -24,10 +24,6 @@ public interface SessionAttendanceRepository extends JpaRepository<SessionAttend
             + " AND a.checkedInAt IS NULL AND " + SESSION_END + " < :cutoff")
     long countNoShowsByUserId(@Param("userId") Long userId, @Param("cutoff") LocalDateTime cutoff);
 
-    @Query("SELECT a.user.id, COUNT(a) FROM SessionAttendance a WHERE a.createdAt >= :since AND " + CONFIRMED
-            + " GROUP BY a.user.id")
-    List<Object[]> countConfirmedByUserSince(@Param("since") LocalDateTime since);
-
     @Query("SELECT a.user.id, COUNT(a) FROM SessionAttendance a WHERE a.checkedInAt >= :since GROUP BY a.user.id")
     List<Object[]> countCheckInsByUserSince(@Param("since") LocalDateTime since);
 

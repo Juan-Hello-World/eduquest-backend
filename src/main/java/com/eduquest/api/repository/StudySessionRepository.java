@@ -28,8 +28,10 @@ public interface StudySessionRepository extends JpaRepository<StudySession, Long
 
     long countByCreatedAtAfter(LocalDateTime after);
 
-    @Query("SELECT s.createdBy.id, COUNT(s) FROM StudySession s WHERE s.createdAt >= :since GROUP BY s.createdBy.id")
-    List<Object[]> countByCreatorSince(@Param("since") LocalDateTime since);
+    @Query("SELECT s.createdBy.id, COUNT(s) FROM StudySession s WHERE s.scheduledAt >= :since AND EXISTS ("
+            + "SELECT a.id FROM SessionAttendance a WHERE a.session = s AND a.checkedInAt IS NOT NULL"
+            + " AND a.user <> s.createdBy) GROUP BY s.createdBy.id")
+    List<Object[]> countAttendedByCreatorSince(@Param("since") LocalDateTime since);
 
     long countByPrivateGroupIdAndCreatedAtAfterAndCreatedByIdNot(Long groupId, LocalDateTime after, Long userId);
 }

@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -23,6 +24,10 @@ public interface ForumVoteRepository extends JpaRepository<ForumVote, Long> {
 
     @Query("SELECT COALESCE(SUM(v.value), 0) FROM ForumVote v WHERE v.answer.id = :answerId")
     long scoreOf(@Param("answerId") Long answerId);
+
+    @Query("SELECT v.answer.author.id, COUNT(v) FROM ForumVote v WHERE v.value > 0 AND v.answer.createdAt >= :since"
+            + " GROUP BY v.answer.author.id, v.answer.id")
+    List<Object[]> countUpvotesPerAnswerSince(@Param("since") LocalDateTime since);
 
     @Modifying
     @Query("DELETE FROM ForumVote v WHERE v.answer.id = :answerId")
