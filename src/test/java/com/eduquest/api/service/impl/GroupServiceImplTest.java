@@ -56,6 +56,7 @@ class GroupServiceImplTest {
     @Mock org.springframework.context.ApplicationEventPublisher eventPublisher;
     @Mock com.eduquest.api.service.DocumentService documentService;
     @Mock GroupChatCleaner chatCleaner;
+    @Mock com.eduquest.api.service.FileStorageService fileStorageService;
 
     @InjectMocks GroupServiceImpl groupService;
 
@@ -662,5 +663,110 @@ class GroupServiceImplTest {
         verify(chatCleaner).beforeMessages(9L);
         verify(chatCleaner).afterMessages(9L);
         assertThat(group.getModerators()).isEmpty();
+    }
+
+    private PrivateGroup managedGroup() {
+        PrivateGroup group = new PrivateGroup();
+        group.setId(30L);
+        group.setName("Teoria");
+        group.setCreator(alice);
+        group.getMembers().add(alice);
+        group.setIconUrl("/api/v1/files/11111111-1111-1111-1111-111111111111");
+        when(groupRepository.findById(30L)).thenReturn(Optional.of(group));
+        when(groupRepository.save(any(PrivateGroup.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        return group;
+    }
+
+    private static com.eduquest.api.dto.response.StoredFileDTO file(String contentType) {
+        return new com.eduquest.api.dto.response.StoredFileDTO(new byte[] {1}, contentType, "archivo");
+    }
+
+    @Test
+    void updateAppearance_savesImagesAndColorAndReplacesOldIcon() {
+        PrivateGroup group = managedGroup();
+        String icon = "/api/v1/files/22222222-2222-2222-2222-222222222222";
+        String banner = "/api/v1/files/33333333-3333-3333-3333-333333333333";
+        com.eduquest.api.dto.response.StoredFileDTO png = file("image/png");
+        com.eduquest.api.dto.response.StoredFileDTO jpg = file("image/jpeg");
+        when(fileStorageService.loadByUrl(icon)).thenReturn(Optional.of(png));
+        when(fileStorageService.loadByUrl(banner)).thenReturn(Optional.of(jpg));
+        com.eduquest.api.dto.request.GroupAppearanceRequestDTO request = new com.eduquest.api.dto.request.GroupAppearanceRequestDTO();
+        request.setColor("#FFD25E");
+        request.setIconUrl(" " + icon + " ");
+        request.setBannerUrl(banner);
+
+        GroupResponseDTO response = groupService.updateAppearance(30L, request, "alice");
+
+        assertThat(response.getColor()).isEqualTo("#ffd25e");
+        assertThat(response.getIconUrl()).isEqualTo(icon);
+        assertThat(response.getBannerUrl()).isEqualTo(banner);
+        verify(fileStorageService).deleteByUrl("/api/v1/files/11111111-1111-1111-1111-111111111111");
+        assertThat(group.getBannerUrl()).isEqualTo(banner);
+    }
+
+    @Test
+    void updateAppearance_clearsValuesWhenBlank() {
+        PrivateGroup group = managedGroup();
+        group.setColor("#3ee6a8");
+        com.eduquest.api.dto.request.GroupAppearanceRequestDTO request = new com.eduquest.api.dto.request.GroupAppearanceRequestDTO();
+        request.setColor(" ");
+        request.setIconUrl("");
+
+        GroupResponseDTO response = groupService.updateAppearance(30L, request, "alice");
+
+        assertThat(response.getColor()).isNull();
+        assertThat(response.getIconUrl()).isNull();
+        assertThat(response.getBannerUrl()).isNull();
+        verify(fileStorageService).deleteByUrl("/api/v1/files/11111111-1111-1111-1111-111111111111");
+    }
+
+    @Test
+    void updateAppearance_rejectsFilesThatAreNotImages() {
+        managedGroup();
+        String pdf = "/api/v1/files/44444444-4444-4444-4444-444444444444";
+        com.eduquest.api.dto.response.StoredFileDTO document = file("application/pdf");
+        when(fileStorageService.loadByUrl(pdf)).thenReturn(Optional.of(document));
+        com.eduquest.api.dto.request.GroupAppearanceRequestDTO request = new com.eduquest.api.dto.request.GroupAppearanceRequestDTO();
+        request.setIconUrl(pdf);
+
+        assertThatThrownBy(() -> groupService.updateAppearance(30L, request, "alice")).isInstanceOf(BadRequestException.class);
+
+        com.eduquest.api.dto.request.GroupAppearanceRequestDTO missing = new com.eduquest.api.dto.request.GroupAppearanceRequestDTO();
+        missing.setBannerUrl("/api/v1/files/55555555-5555-5555-5555-555555555555");
+        when(fileStorageService.loadByUrl(missing.getBannerUrl())).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> groupService.updateAppearance(30L, missing, "alice")).isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void updateAppearance_forbiddenForMembersWhoCannotManage() {
+        PrivateGroup group = managedGroup();
+        User bob = new User();
+        bob.setId(2L);
+        bob.setUsername("bob");
+        group.getMembers().add(bob);
+        when(userRepository.findByUsername("bob")).thenReturn(Optional.of(bob));
+
+        assertThatThrownBy(() -> groupService.updateAppearance(30L, new com.eduquest.api.dto.request.GroupAppearanceRequestDTO(), "bob"))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void updateAppearance_missingGroup_throwsNotFound() {
+        when(groupRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> groupService.updateAppearance(99L, new com.eduquest.api.dto.request.GroupAppearanceRequestDTO(), "alice"))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void createGroup_storesNormalizedColor() {
+        when(groupRepository.save(any(PrivateGroup.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        GroupRequestDTO request = new GroupRequestDTO();
+        request.setName("Con color");
+        request.setColor("#FF6FB5");
+
+        GroupResponseDTO response = groupService.createGroup(request, "alice");
+
+        assertThat(response.getColor()).isEqualTo("#ff6fb5");
     }
 }

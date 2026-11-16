@@ -245,4 +245,18 @@ class GroupControllerTest {
         org.mockito.Mockito.verify(groupService).leaveGroup(1L, "alice");
         org.mockito.Mockito.verify(groupService).removeMember(1L, 2L, "alice");
     }
+
+    @Test
+    void updateAppearance_delegatesToService() {
+        Authentication authentication = mock(Authentication.class);
+        when(authentication.getName()).thenReturn("alice");
+        com.eduquest.api.dto.request.GroupAppearanceRequestDTO request = new com.eduquest.api.dto.request.GroupAppearanceRequestDTO();
+        request.setColor("#ffd25e");
+        when(groupService.updateAppearance(1L, request, "alice")).thenReturn(response());
+
+        ResponseEntity<GroupResponseDTO> result = groupController.updateAppearance(1L, request, authentication);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(result.getBody().getName()).isEqualTo("Grupo de Calculo");
+    }
 }

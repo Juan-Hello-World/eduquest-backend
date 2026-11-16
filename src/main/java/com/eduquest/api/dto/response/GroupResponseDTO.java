@@ -25,4 +25,7 @@ public class GroupResponseDTO {
     private boolean muted;
     private boolean canManage;
     private long unreadMentions;
+    private String color;
+    private String iconUrl;
+    private String bannerUrl;
 }

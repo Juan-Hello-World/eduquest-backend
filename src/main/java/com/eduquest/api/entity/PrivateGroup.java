@@ -77,6 +77,15 @@ public class PrivateGroup {
     @Column(name = "banned_words", columnDefinition = "TEXT")
     private String bannedWords;
 
+    @Column(length = 7)
+    private String color;
+
+    @Column(name = "icon_url", length = 200)
+    private String iconUrl;
+
+    @Column(name = "banner_url", length = 200)
+    private String bannerUrl;
+
     public boolean isCreator(User user) {
         return creator != null && user != null && creator.getId().equals(user.getId());
     }

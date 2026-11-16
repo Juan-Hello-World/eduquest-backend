@@ -3,6 +3,7 @@ package com.eduquest.api.controller;
 import com.eduquest.api.dto.request.DocumentRequestDTO;
 import com.eduquest.api.dto.request.GroupPasswordRequestDTO;
 import com.eduquest.api.dto.request.GroupRequestDTO;
+import com.eduquest.api.dto.request.GroupAppearanceRequestDTO;
 import com.eduquest.api.dto.request.GroupUpdateRequestDTO;
 import com.eduquest.api.dto.request.JoinGroupRequestDTO;
 import com.eduquest.api.dto.response.DocumentResponseDTO;
@@ -163,6 +164,15 @@ public class GroupController {
                                                         @Valid @RequestBody GroupUpdateRequestDTO request,
                                                         Authentication authentication) {
         return ResponseEntity.ok(groupService.updateGroup(groupId, request, authentication.getName()));
+    }
+
+    @PutMapping("/{groupId}/appearance")
+    @PreAuthorize("hasAuthority('ROLE_USER') or hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_MANAGER')")
+    @Operation(summary = "Personalizar grupo", description = "Creador o moderadores. Cambia el color, la foto y la portada (imágenes subidas con /files).")
+    public ResponseEntity<GroupResponseDTO> updateAppearance(@PathVariable Long groupId,
+                                                             @Valid @RequestBody GroupAppearanceRequestDTO request,
+                                                             Authentication authentication) {
+        return ResponseEntity.ok(groupService.updateAppearance(groupId, request, authentication.getName()));
     }
 
     @DeleteMapping("/{groupId}")

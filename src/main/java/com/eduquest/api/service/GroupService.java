@@ -1,6 +1,7 @@
 package com.eduquest.api.service;
 
 import com.eduquest.api.dto.request.GroupRequestDTO;
+import com.eduquest.api.dto.request.GroupAppearanceRequestDTO;
 import com.eduquest.api.dto.request.GroupUpdateRequestDTO;
 import com.eduquest.api.dto.response.GroupInviteResponseDTO;
 import com.eduquest.api.dto.response.GroupMemberResponseDTO;
@@ -27,6 +28,7 @@ public interface GroupService {
     void changePassword(Long groupId, String newPassword, String username);
     List<GroupMemberResponseDTO> getMembers(Long groupId, String username);
     GroupResponseDTO updateGroup(Long groupId, GroupUpdateRequestDTO request, String username);
+    GroupResponseDTO updateAppearance(Long groupId, GroupAppearanceRequestDTO request, String username);
     void deleteGroup(Long groupId, String username);
     void leaveGroup(Long groupId, String username);
     void removeMember(Long groupId, Long memberId, String username);

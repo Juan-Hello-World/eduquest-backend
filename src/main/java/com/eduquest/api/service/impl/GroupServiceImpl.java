@@ -1,6 +1,7 @@
 package com.eduquest.api.service.impl;
 
 import com.eduquest.api.dto.request.GroupRequestDTO;
+import com.eduquest.api.dto.request.GroupAppearanceRequestDTO;
 import com.eduquest.api.dto.request.GroupUpdateRequestDTO;
 import com.eduquest.api.dto.response.GroupInviteResponseDTO;
 import com.eduquest.api.dto.response.GroupMemberResponseDTO;
@@ -27,6 +28,7 @@ import com.eduquest.api.repository.PrivateGroupRepository;
 import com.eduquest.api.repository.StudySessionRepository;
 import com.eduquest.api.repository.UserRepository;
 import com.eduquest.api.service.DocumentService;
+import com.eduquest.api.service.FileStorageService;
 import com.eduquest.api.service.GroupCodeGenerator;
 import com.eduquest.api.service.GroupService;
 import org.springframework.context.ApplicationEventPublisher;
@@ -59,6 +61,7 @@ public class GroupServiceImpl implements GroupService {
     private final ApplicationEventPublisher eventPublisher;
     private final DocumentService documentService;
     private final GroupChatCleaner chatCleaner;
+    private final FileStorageService fileStorageService;
 
     public GroupServiceImpl(PrivateGroupRepository groupRepository,
                             UserRepository userRepository,
@@ -70,7 +73,8 @@ public class GroupServiceImpl implements GroupService {
                             GroupMessageRepository messageRepository,
                             ApplicationEventPublisher eventPublisher,
                             DocumentService documentService,
-                            GroupChatCleaner chatCleaner) {
+                            GroupChatCleaner chatCleaner,
+                            FileStorageService fileStorageService) {
         this.groupRepository = groupRepository;
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
@@ -82,6 +86,7 @@ public class GroupServiceImpl implements GroupService {
         this.eventPublisher = eventPublisher;
         this.documentService = documentService;
         this.chatCleaner = chatCleaner;
+        this.fileStorageService = fileStorageService;
     }
 
     @Override
@@ -97,6 +102,7 @@ public class GroupServiceImpl implements GroupService {
         group.setVisibility(visibility);
         group.setCode(codeGenerator.nextCode());
         group.setLastActivityAt(LocalDateTime.now());
+        group.setColor(normalizeColor(request.getColor()));
 
         if (visibility == GroupVisibility.PRIVATE) {
             if (request.getPassword() == null || request.getPassword().isBlank()) {
@@ -215,6 +221,49 @@ public class GroupServiceImpl implements GroupService {
 
     @Override
     @Transactional
+    public GroupResponseDTO updateAppearance(Long groupId, GroupAppearanceRequestDTO request, String username) {
+        User user = findUser(username);
+        PrivateGroup group = groupRepository.findById(groupId)
+                .orElseThrow(() -> new ResourceNotFoundException("Grupo no encontrado"));
+        if (!group.canManage(user) && !user.hasRole(RoleName.ROLE_ADMIN)) {
+            throw new ForbiddenException("Solo el creador y los moderadores pueden personalizar el grupo");
+        }
+        String iconUrl = validatedImage(request.getIconUrl());
+        String bannerUrl = validatedImage(request.getBannerUrl());
+        replaceFile(group.getIconUrl(), iconUrl);
+        replaceFile(group.getBannerUrl(), bannerUrl);
+        group.setColor(normalizeColor(request.getColor()));
+        group.setIconUrl(iconUrl);
+        group.setBannerUrl(bannerUrl);
+        return mapToResponse(groupRepository.save(group), user);
+    }
+
+    private String validatedImage(String url) {
+        if (url == null || url.isBlank()) {
+            return null;
+        }
+        String trimmed = url.trim();
+        boolean image = fileStorageService.loadByUrl(trimmed)
+                .map(file -> file.contentType() != null && file.contentType().startsWith("image/"))
+                .orElse(false);
+        if (!image) {
+            throw new BadRequestException("La foto y la portada deben ser imágenes subidas a EduQuest");
+        }
+        return trimmed;
+    }
+
+    private void replaceFile(String previous, String next) {
+        if (previous != null && !previous.equals(next)) {
+            fileStorageService.deleteByUrl(previous);
+        }
+    }
+
+    private static String normalizeColor(String color) {
+        return color == null || color.isBlank() ? null : color.trim().toLowerCase();
+    }
+
+    @Override
+    @Transactional
     public void deleteGroup(Long groupId, String username) {
         User user = findUser(username);
         PrivateGroup group = groupRepository.findById(groupId)
@@ -231,6 +280,8 @@ public class GroupServiceImpl implements GroupService {
         messageRepository.deleteByGroupId(groupId);
         chatCleaner.afterMessages(groupId);
         visitRepository.deleteByGroupId(groupId);
+        replaceFile(group.getIconUrl(), null);
+        replaceFile(group.getBannerUrl(), null);
         group.getModerators().clear();
         group.getMembers().clear();
         groupRepository.delete(group);
@@ -420,6 +471,9 @@ public class GroupServiceImpl implements GroupService {
         response.setMemberCount(group.getMembers().size());
         response.setLastActivityAt(group.getLastActivityAt());
         response.setCanManage(group.canManage(viewer));
+        response.setColor(group.getColor());
+        response.setIconUrl(group.getIconUrl());
+        response.setBannerUrl(group.getBannerUrl());
         return response;
     }
 }
