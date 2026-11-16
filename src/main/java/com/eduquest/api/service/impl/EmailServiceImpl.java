@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.thymeleaf.context.Context;
 import org.thymeleaf.spring6.SpringTemplateEngine;
 
+import java.util.HashMap;
 import java.util.Map;
 
 @Service
@@ -42,6 +43,22 @@ public class EmailServiceImpl implements EmailService {
     public void sendPasswordResetCode(String to, String username, String code, String resetLink) {
         sendHtmlEmail(to, "EduQuest: tu código para cambiar la contraseña",
                 "email/password-reset", Map.of("username", username, "code", code, "resetLink", resetLink));
+    }
+
+    @Override
+    public void sendVerificationCode(String to, String username, String code) {
+        sendHtmlEmail(to, "EduQuest: confirma tu correo",
+                "email/verify-email", Map.of("username", username, "code", code));
+    }
+
+    @Override
+    public void sendAppealDecision(String to, String username, boolean accepted, String response) {
+        Map<String, Object> variables = new HashMap<>();
+        variables.put("username", username);
+        variables.put("accepted", accepted);
+        variables.put("response", response);
+        sendHtmlEmail(to, accepted ? "EduQuest: levantamos tu suspensión" : "EduQuest: revisamos tu apelación",
+                "email/appeal-decision", variables);
     }
 
     private String renderTemplate(String template, Map<String, Object> variables) {

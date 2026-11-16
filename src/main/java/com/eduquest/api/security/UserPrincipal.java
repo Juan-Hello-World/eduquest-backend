@@ -23,6 +23,8 @@ public class UserPrincipal implements UserDetails {
     private final boolean banned;
     private final String banReason;
     private final LocalDateTime bannedAt;
+    private final LocalDateTime bannedUntil;
+    private boolean emailVerified = true;
 
     public UserPrincipal(Long id, String username, String email, String password,
                          Collection<? extends GrantedAuthority> authorities) {
@@ -32,6 +34,12 @@ public class UserPrincipal implements UserDetails {
     public UserPrincipal(Long id, String username, String email, String password,
                          Collection<? extends GrantedAuthority> authorities,
                          boolean banned, String banReason, LocalDateTime bannedAt) {
+        this(id, username, email, password, authorities, banned, banReason, bannedAt, null);
+    }
+
+    public UserPrincipal(Long id, String username, String email, String password,
+                         Collection<? extends GrantedAuthority> authorities,
+                         boolean banned, String banReason, LocalDateTime bannedAt, LocalDateTime bannedUntil) {
         this.id = id;
         this.username = username;
         this.email = email;
@@ -40,6 +48,7 @@ public class UserPrincipal implements UserDetails {
         this.banned = banned;
         this.banReason = banReason;
         this.bannedAt = bannedAt;
+        this.bannedUntil = bannedUntil;
     }
 
     public static UserPrincipal build(User user) {
@@ -48,7 +57,7 @@ public class UserPrincipal implements UserDetails {
                 .map(name -> new SimpleGrantedAuthority(name.name()))
                 .collect(Collectors.toSet());
 
-        return new UserPrincipal(
+        UserPrincipal principal = new UserPrincipal(
                 user.getId(),
                 user.getUsername(),
                 user.getEmail(),
@@ -56,8 +65,11 @@ public class UserPrincipal implements UserDetails {
                 authorities,
                 user.isBanned(),
                 user.getBanReason(),
-                user.getBannedAt()
+                user.getBannedAt(),
+                user.getBannedUntil()
         );
+        principal.emailVerified = user.isEmailVerified();
+        return principal;
     }
 
     @Override

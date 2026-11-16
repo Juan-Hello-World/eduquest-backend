@@ -18,6 +18,7 @@ public class AuthResponseDTO {
     private String email;
     private Set<String> roles;
     private String avatarUrl;
+    private boolean emailVerified = true;
 
     public AuthResponseDTO(String token, String refreshToken, Long id, String username, String email, Set<String> roles) {
         this.token = token;

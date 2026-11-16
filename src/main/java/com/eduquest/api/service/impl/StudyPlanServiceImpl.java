@@ -119,6 +119,15 @@ public class StudyPlanServiceImpl implements StudyPlanService {
         return mapToResponseDTO(saved);
     }
 
+    @Override
+    @Transactional
+    public void deletePlan(Long planId, String username) {
+        User user = findUser(username);
+        StudyPlan plan = studyPlanRepository.findByIdAndUserId(planId, user.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Plan de estudio no encontrado"));
+        studyPlanRepository.delete(plan);
+    }
+
     private User findUser(String username) {
         return userRepository.findByUsername(username)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado"));

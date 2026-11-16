@@ -31,9 +31,35 @@ public class DirectMessage {
     @Column(nullable = false, length = 1000)
     private String content;
 
+    @Column(name = "image_url", length = 500)
+    private String imageUrl;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reply_to_id")
+    private DirectMessage replyTo;
+
+    @Column(name = "file_url", length = 500)
+    private String fileUrl;
+
+    @Column(name = "file_name", length = 200)
+    private String fileName;
+
+    @Column(length = 500)
+    private String sticker;
+
+    @Column(name = "edited_at")
+    private LocalDateTime editedAt;
+
+    @Column(name = "deleted")
+    private Boolean deleted = false;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
     @Column(name = "read_at")
     private LocalDateTime readAt;
+
+    public boolean isDeleted() {
+        return Boolean.TRUE.equals(deleted);
+    }
 }

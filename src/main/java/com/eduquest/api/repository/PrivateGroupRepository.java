@@ -42,4 +42,12 @@ public interface PrivateGroupRepository extends JpaRepository<PrivateGroup, Long
                                       Pageable pageable);
 
     List<PrivateGroup> findByMembersId(Long userId);
+
+    @Query("SELECT g FROM PrivateGroup g WHERE LOWER(g.name) LIKE :pattern "
+            + "AND (g.visibility = com.eduquest.api.entity.GroupVisibility.PUBLIC "
+            + "OR EXISTS (SELECT m FROM g.members m WHERE m.id = :userId)) ORDER BY g.lastActivityAt DESC NULLS LAST")
+    List<PrivateGroup> searchForUser(@Param("pattern") String pattern, @Param("userId") Long userId, Pageable pageable);
+
+    @Query("SELECT m.id FROM PrivateGroup g JOIN g.members m WHERE g.id = :groupId")
+    List<Long> findMemberIds(@Param("groupId") Long groupId);
 }

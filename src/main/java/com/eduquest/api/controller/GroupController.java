@@ -1,8 +1,9 @@
 package com.eduquest.api.controller;
 
 import com.eduquest.api.dto.request.DocumentRequestDTO;
-import com.eduquest.api.dto.request.GroupRequestDTO;
 import com.eduquest.api.dto.request.GroupPasswordRequestDTO;
+import com.eduquest.api.dto.request.GroupRequestDTO;
+import com.eduquest.api.dto.request.GroupUpdateRequestDTO;
 import com.eduquest.api.dto.request.JoinGroupRequestDTO;
 import com.eduquest.api.dto.response.DocumentResponseDTO;
 import com.eduquest.api.dto.response.GroupInviteResponseDTO;
@@ -153,5 +154,39 @@ public class GroupController {
                 Sort.by(Sort.Direction.DESC, "uploadedAt"));
         String username = authentication.getName();
         return ResponseEntity.ok(documentService.getDocumentsByGroup(groupId, username, pageable));
+    }
+
+    @PutMapping("/{groupId}")
+    @PreAuthorize("hasAuthority('ROLE_USER') or hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_MANAGER')")
+    @Operation(summary = "Editar grupo", description = "Solo el creador. Cambia el nombre y la descripción.")
+    public ResponseEntity<GroupResponseDTO> updateGroup(@PathVariable Long groupId,
+                                                        @Valid @RequestBody GroupUpdateRequestDTO request,
+                                                        Authentication authentication) {
+        return ResponseEntity.ok(groupService.updateGroup(groupId, request, authentication.getName()));
+    }
+
+    @DeleteMapping("/{groupId}")
+    @PreAuthorize("hasAuthority('ROLE_USER') or hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_MANAGER')")
+    @Operation(summary = "Eliminar grupo", description = "Creador o ADMIN. Borra también su material, sesiones y chat.")
+    public ResponseEntity<Void> deleteGroup(@PathVariable Long groupId, Authentication authentication) {
+        groupService.deleteGroup(groupId, authentication.getName());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{groupId}/leave")
+    @PreAuthorize("hasAuthority('ROLE_USER') or hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_MANAGER')")
+    @Operation(summary = "Salir del grupo", description = "El creador no puede salir; debe eliminar el grupo.")
+    public ResponseEntity<Void> leaveGroup(@PathVariable Long groupId, Authentication authentication) {
+        groupService.leaveGroup(groupId, authentication.getName());
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/{groupId}/members/{memberId}")
+    @PreAuthorize("hasAuthority('ROLE_USER') or hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_MANAGER')")
+    @Operation(summary = "Quitar a un integrante", description = "Solo el creador del grupo.")
+    public ResponseEntity<Void> removeMember(@PathVariable Long groupId, @PathVariable Long memberId,
+                                             Authentication authentication) {
+        groupService.removeMember(groupId, memberId, authentication.getName());
+        return ResponseEntity.noContent().build();
     }
 }

@@ -1,5 +1,6 @@
 package com.eduquest.api.controller;
 
+import com.eduquest.api.dto.request.EditMessageRequestDTO;
 import com.eduquest.api.dto.request.GroupMessageRequestDTO;
 import com.eduquest.api.dto.response.ConversationResponseDTO;
 import com.eduquest.api.dto.response.DirectMessageResponseDTO;
@@ -66,8 +67,26 @@ public class DirectMessageController {
     public ResponseEntity<DirectMessageResponseDTO> sendMessage(@PathVariable Long userId,
                                                                 @Valid @RequestBody GroupMessageRequestDTO request,
                                                                 Authentication authentication) {
-        return new ResponseEntity<>(messageService.sendMessage(authentication.getName(), userId, request.getContent()),
+        return new ResponseEntity<>(messageService.sendMessage(authentication.getName(), userId, request),
                 HttpStatus.CREATED);
+    }
+
+    @PutMapping("/{userId}/messages/{messageId}")
+    @Operation(summary = "Editar mi mensaje directo")
+    public ResponseEntity<DirectMessageResponseDTO> editMessage(@PathVariable Long userId,
+                                                                @PathVariable Long messageId,
+                                                                @Valid @RequestBody EditMessageRequestDTO request,
+                                                                Authentication authentication) {
+        return ResponseEntity.ok(messageService.editMessage(authentication.getName(), userId, messageId,
+                request.getContent()));
+    }
+
+    @DeleteMapping("/{userId}/messages/{messageId}")
+    @Operation(summary = "Eliminar mi mensaje directo")
+    public ResponseEntity<DirectMessageResponseDTO> deleteMessage(@PathVariable Long userId,
+                                                                  @PathVariable Long messageId,
+                                                                  Authentication authentication) {
+        return ResponseEntity.ok(messageService.deleteMessage(authentication.getName(), userId, messageId));
     }
 
     @PostMapping("/{userId}/read")

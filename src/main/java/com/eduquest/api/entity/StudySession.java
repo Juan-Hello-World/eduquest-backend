@@ -37,6 +37,9 @@ public class StudySession {
     @Column(nullable = false)
     private LocalDateTime scheduledAt;
 
+    @Column(name = "ends_at")
+    private LocalDateTime endsAt;
+
     private String meetingUrl;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -62,7 +65,29 @@ public class StudySession {
     @OneToMany(mappedBy = "session", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<SessionReview> reviews = new ArrayList<>();
 
+    public static final int DEFAULT_DURATION_MINUTES = 60;
+    public static final int CHECK_IN_EARLY_MINUTES = 10;
+
+    public LocalDateTime getEffectiveEnd() {
+        if (endsAt != null) {
+            return endsAt;
+        }
+        return scheduledAt != null ? scheduledAt.plusMinutes(DEFAULT_DURATION_MINUTES) : null;
+    }
+
+    public boolean hasStarted() {
+        return scheduledAt != null && !scheduledAt.isAfter(LocalDateTime.now());
+    }
+
     public boolean isFinished() {
-        return scheduledAt != null && scheduledAt.isBefore(LocalDateTime.now());
+        LocalDateTime end = getEffectiveEnd();
+        return end != null && end.isBefore(LocalDateTime.now());
+    }
+
+    public boolean isCheckInOpen() {
+        LocalDateTime now = LocalDateTime.now();
+        return scheduledAt != null
+                && !now.isBefore(scheduledAt.minusMinutes(CHECK_IN_EARLY_MINUTES))
+                && !isFinished();
     }
 }

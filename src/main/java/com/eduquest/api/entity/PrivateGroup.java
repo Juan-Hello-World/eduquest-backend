@@ -63,6 +63,32 @@ public class PrivateGroup {
     )
     private Set<User> members = new HashSet<>();
 
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "group_moderators",
+            joinColumns = @JoinColumn(name = "group_id"),
+            inverseJoinColumns = @JoinColumn(name = "user_id")
+    )
+    private Set<User> moderators = new HashSet<>();
+
+    @Column(name = "voice_room", length = 80)
+    private String voiceRoom;
+
+    @Column(name = "banned_words", columnDefinition = "TEXT")
+    private String bannedWords;
+
+    public boolean isCreator(User user) {
+        return creator != null && user != null && creator.getId().equals(user.getId());
+    }
+
+    public boolean isModerator(User user) {
+        return user != null && moderators.stream().anyMatch(moderator -> moderator.getId().equals(user.getId()));
+    }
+
+    public boolean canManage(User user) {
+        return isCreator(user) || isModerator(user);
+    }
+
     public boolean isPrivate() {
         return visibility == GroupVisibility.PRIVATE;
     }

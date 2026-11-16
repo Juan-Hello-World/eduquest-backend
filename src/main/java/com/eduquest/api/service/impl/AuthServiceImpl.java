@@ -15,8 +15,10 @@ import com.eduquest.api.exception.UserBannedException;
 import com.eduquest.api.repository.RoleRepository;
 import com.eduquest.api.repository.UserRepository;
 import com.eduquest.api.security.JwtService;
+import com.eduquest.api.security.LoginAttemptService;
 import com.eduquest.api.security.UserPrincipal;
 import com.eduquest.api.service.AuthService;
+import com.eduquest.api.service.EmailVerificationService;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -27,6 +29,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -40,28 +43,36 @@ public class AuthServiceImpl implements AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final ApplicationEventPublisher eventPublisher;
+    private final LoginAttemptService loginAttemptService;
+    private final EmailVerificationService emailVerificationService;
 
     public AuthServiceImpl(AuthenticationManager authenticationManager, UserRepository userRepository,
                            RoleRepository roleRepository, PasswordEncoder passwordEncoder,
-                           JwtService jwtService, ApplicationEventPublisher eventPublisher) {
+                           JwtService jwtService, ApplicationEventPublisher eventPublisher,
+                           LoginAttemptService loginAttemptService,
+                           EmailVerificationService emailVerificationService) {
         this.authenticationManager = authenticationManager;
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.eventPublisher = eventPublisher;
+        this.loginAttemptService = loginAttemptService;
+        this.emailVerificationService = emailVerificationService;
     }
 
     private AuthResponseDTO buildAuthResponse(UserPrincipal principal, Set<String> roles) {
         String accessToken = jwtService.generateAccessToken(principal);
         String refreshToken = jwtService.generateRefreshToken(principal);
-        return new AuthResponseDTO(accessToken, refreshToken, principal.getId(),
+        AuthResponseDTO response = new AuthResponseDTO(accessToken, refreshToken, principal.getId(),
                 principal.getUsername(), principal.getEmail(), roles);
+        response.setEmailVerified(principal.isEmailVerified());
+        return response;
     }
 
     private void ensureNotBanned(User user) {
         if (user.isBanned()) {
-            throw new UserBannedException(user.getBanReason(), user.getBannedAt());
+            throw new UserBannedException(user.getBanReason(), user.getBannedAt(), user.getBannedUntil());
         }
     }
 
@@ -73,14 +84,24 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public AuthResponseDTO authenticateUser(LoginRequestDTO loginRequest) {
+        String username = loginRequest.getUsername();
+        loginAttemptService.ensureAllowed(username);
         Authentication authentication;
         try {
             authentication = authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(loginRequest.getUsername(), loginRequest.getPassword())
+                    new UsernamePasswordAuthenticationToken(username, loginRequest.getPassword())
             );
         } catch (BadCredentialsException ex) {
-            throw new InvalidCredentialsException("Usuario o contraseña incorrectos");
+            loginAttemptService.recordFailure(username);
+            int remaining = loginAttemptService.remainingAttempts(username);
+            if (remaining == 0) {
+                loginAttemptService.ensureAllowed(username);
+            }
+            throw new InvalidCredentialsException(remaining <= 2
+                    ? "Usuario o contraseña incorrectos. Te " + (remaining == 1 ? "queda 1 intento" : "quedan " + remaining + " intentos")
+                    : "Usuario o contraseña incorrectos");
         }
+        loginAttemptService.recordSuccess(username);
 
         UserPrincipal principal = (UserPrincipal) authentication.getPrincipal();
         User user = userRepository.findByUsername(principal.getUsername())
@@ -111,6 +132,8 @@ public class AuthServiceImpl implements AuthService {
         user.setEmail(registerRequest.getEmail());
         user.setPassword(passwordEncoder.encode(registerRequest.getPassword()));
         user.setAdvisor(Boolean.TRUE.equals(registerRequest.getAdvisor()));
+        user.setCreatedAt(LocalDateTime.now());
+        user.setEmailVerified(!emailVerificationService.isEnabled());
 
         Role userRole = roleRepository.findByName(RoleName.ROLE_USER)
                 .orElseThrow(() -> new ResourceNotFoundException("Rol de usuario no establecido en la base de datos"));
@@ -123,6 +146,9 @@ public class AuthServiceImpl implements AuthService {
 
         // Evento asíncrono de correo de bienvenida (se dispara tras el commit)
         eventPublisher.publishEvent(new OnUserRegistrationEvent(this, savedUser.getEmail(), savedUser.getUsername()));
+        if (!savedUser.isEmailVerified()) {
+            emailVerificationService.sendCode(savedUser);
+        }
 
         return buildAuthResponse(principal, roles);
     }

@@ -29,9 +29,23 @@ public class SessionAttendance {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "confirmed")
+    private Boolean confirmed = true;
+
+    @Column(name = "checked_in_at")
+    private LocalDateTime checkedInAt;
+
     public SessionAttendance(StudySession session, User user, LocalDateTime createdAt) {
         this.session = session;
         this.user = user;
         this.createdAt = createdAt;
+    }
+
+    public boolean isConfirmed() {
+        return !Boolean.FALSE.equals(confirmed);
+    }
+
+    public boolean isCheckedIn() {
+        return checkedInAt != null;
     }
 }

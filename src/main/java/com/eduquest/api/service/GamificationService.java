@@ -7,6 +7,7 @@ import java.util.List;
 
 public interface GamificationService {
     GamificationProfileDTO getProfile(String username);
+    GamificationProfileDTO getProfile(Long userId);
     List<LeaderboardEntryDTO> getLeaderboard(String period);
     void syncBadges(Long userId);
 }

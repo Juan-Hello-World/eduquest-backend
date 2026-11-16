@@ -13,9 +13,11 @@ public class DocumentResponseDTO {
     private String description;
     private String fileUrl;
     private LocalDateTime uploadedAt;
+    private Long authorId;
     private String authorUsername;
     private String groupName;
     private String course;
     private String university;
+    private boolean featured;
     private Set<String> tags;
 }

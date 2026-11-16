@@ -1,15 +1,18 @@
 package com.eduquest.api.service.impl;
 
 import com.eduquest.api.dto.request.GroupRequestDTO;
+import com.eduquest.api.dto.request.GroupUpdateRequestDTO;
 import com.eduquest.api.dto.response.GroupInviteResponseDTO;
 import com.eduquest.api.dto.response.GroupMemberResponseDTO;
 import com.eduquest.api.dto.response.GroupResponseDTO;
 import com.eduquest.api.dto.response.PageResponseDTO;
 import com.eduquest.api.dto.response.UserResponseDTO;
+import com.eduquest.api.entity.Availability;
 import com.eduquest.api.entity.GroupVisibility;
 import com.eduquest.api.entity.GroupVisit;
 import com.eduquest.api.entity.NotificationType;
 import com.eduquest.api.entity.PrivateGroup;
+import com.eduquest.api.entity.RoleName;
 import com.eduquest.api.entity.User;
 import com.eduquest.api.event.OnGroupActivityEvent;
 import com.eduquest.api.exception.BadRequestException;
@@ -23,6 +26,7 @@ import com.eduquest.api.repository.GroupVisitRepository;
 import com.eduquest.api.repository.PrivateGroupRepository;
 import com.eduquest.api.repository.StudySessionRepository;
 import com.eduquest.api.repository.UserRepository;
+import com.eduquest.api.service.DocumentService;
 import com.eduquest.api.service.GroupCodeGenerator;
 import com.eduquest.api.service.GroupService;
 import org.springframework.context.ApplicationEventPublisher;
@@ -35,6 +39,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -52,6 +57,8 @@ public class GroupServiceImpl implements GroupService {
     private final StudySessionRepository sessionRepository;
     private final GroupMessageRepository messageRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final DocumentService documentService;
+    private final GroupChatCleaner chatCleaner;
 
     public GroupServiceImpl(PrivateGroupRepository groupRepository,
                             UserRepository userRepository,
@@ -61,7 +68,9 @@ public class GroupServiceImpl implements GroupService {
                             DocumentRepository documentRepository,
                             StudySessionRepository sessionRepository,
                             GroupMessageRepository messageRepository,
-                            ApplicationEventPublisher eventPublisher) {
+                            ApplicationEventPublisher eventPublisher,
+                            DocumentService documentService,
+                            GroupChatCleaner chatCleaner) {
         this.groupRepository = groupRepository;
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
@@ -71,6 +80,8 @@ public class GroupServiceImpl implements GroupService {
         this.sessionRepository = sessionRepository;
         this.messageRepository = messageRepository;
         this.eventPublisher = eventPublisher;
+        this.documentService = documentService;
+        this.chatCleaner = chatCleaner;
     }
 
     @Override
@@ -122,7 +133,10 @@ public class GroupServiceImpl implements GroupService {
         if (group.isPrivate() && !isMember(group, user)) {
             throw new ResourceNotFoundException("Grupo no encontrado");
         }
-        return mapToResponse(group, user);
+        GroupResponseDTO response = mapToResponse(group, user);
+        visitRepository.findByUserIdAndGroupId(user.getId(), groupId)
+                .ifPresent(visit -> response.setMuted(visit.isMuted()));
+        return response;
     }
 
     @Override
@@ -188,6 +202,83 @@ public class GroupServiceImpl implements GroupService {
         groupRepository.save(group);
     }
 
+    @Override
+    @Transactional
+    public GroupResponseDTO updateGroup(Long groupId, GroupUpdateRequestDTO request, String username) {
+        User user = findUser(username);
+        PrivateGroup group = findOwnedGroup(groupId, user);
+        group.setName(request.getName().trim());
+        String description = request.getDescription();
+        group.setDescription(description == null || description.isBlank() ? null : description.trim());
+        return mapToResponse(groupRepository.save(group), user);
+    }
+
+    @Override
+    @Transactional
+    public void deleteGroup(Long groupId, String username) {
+        User user = findUser(username);
+        PrivateGroup group = groupRepository.findById(groupId)
+                .orElseThrow(() -> new ResourceNotFoundException("Grupo no encontrado"));
+        boolean isCreator = group.getCreator() != null && group.getCreator().getId().equals(user.getId());
+        if (!isCreator && !user.hasRole(RoleName.ROLE_ADMIN)) {
+            throw new ForbiddenException("Solo el creador del grupo puede eliminarlo");
+        }
+        documentRepository.findAllByGroupId(groupId)
+                .forEach(document -> documentService.deleteDocument(document.getId()));
+        sessionRepository.deleteAll(sessionRepository.findByPrivateGroupId(groupId));
+        chatCleaner.beforeMessages(groupId);
+        messageRepository.clearRepliesByGroupId(groupId);
+        messageRepository.deleteByGroupId(groupId);
+        chatCleaner.afterMessages(groupId);
+        visitRepository.deleteByGroupId(groupId);
+        group.getModerators().clear();
+        group.getMembers().clear();
+        groupRepository.delete(group);
+    }
+
+    @Override
+    @Transactional
+    public void leaveGroup(Long groupId, String username) {
+        User user = findUser(username);
+        PrivateGroup group = groupRepository.findById(groupId)
+                .orElseThrow(() -> new ResourceNotFoundException("Grupo no encontrado"));
+        if (!isMember(group, user)) {
+            throw new InvalidOperationException("No eres miembro de este grupo");
+        }
+        if (group.getCreator() != null && group.getCreator().getId().equals(user.getId())) {
+            throw new InvalidOperationException("Eres el creador del grupo: si ya no lo necesitas, elimínalo");
+        }
+        group.getMembers().removeIf(member -> member.getId().equals(user.getId()));
+        group.getModerators().removeIf(moderator -> moderator.getId().equals(user.getId()));
+        visitRepository.deleteByGroupIdAndUserId(groupId, user.getId());
+        groupRepository.save(group);
+    }
+
+    @Override
+    @Transactional
+    public void removeMember(Long groupId, Long memberId, String username) {
+        User user = findUser(username);
+        PrivateGroup group = groupRepository.findById(groupId)
+                .orElseThrow(() -> new ResourceNotFoundException("Grupo no encontrado"));
+        if (!group.canManage(user)) {
+            throw new ForbiddenException("Solo el creador o un moderador del grupo puede hacer esto");
+        }
+        if (user.getId().equals(memberId)) {
+            throw new InvalidOperationException("No puedes quitarte a ti mismo del grupo");
+        }
+        User target = group.getMembers().stream()
+                .filter(member -> member.getId().equals(memberId))
+                .findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException("Esa persona no es miembro del grupo"));
+        if (!group.isCreator(user) && (group.isCreator(target) || group.isModerator(target))) {
+            throw new ForbiddenException("Un moderador no puede quitar al creador ni a otros moderadores");
+        }
+        group.getMembers().remove(target);
+        group.getModerators().removeIf(moderator -> moderator.getId().equals(memberId));
+        visitRepository.deleteByGroupIdAndUserId(groupId, memberId);
+        groupRepository.save(group);
+    }
+
     private PrivateGroup findOwnedGroup(Long groupId, User user) {
         PrivateGroup group = groupRepository.findById(groupId)
                 .orElseThrow(() -> new ResourceNotFoundException("Grupo no encontrado"));
@@ -217,9 +308,14 @@ public class GroupServiceImpl implements GroupService {
                     GroupVisit visit = visits.get(group.getId());
                     LocalDateTime seenAt = visit != null ? visit.getLastSeenAt() : null;
                     if (visit != null) {
+                        dto.setMuted(visit.isMuted());
                         LocalDateTime chatSeenAt = visit.getChatSeenAt() != null ? visit.getChatSeenAt() : seenAt;
                         dto.setUnreadMessages(messageRepository
                                 .countByGroupIdAndCreatedAtAfterAndAuthorIdNot(group.getId(), chatSeenAt, user.getId()));
+                        if (dto.getUnreadMessages() > 0) {
+                            dto.setUnreadMentions(messageRepository.countMentionsSince(group.getId(), chatSeenAt, user.getId(),
+                                    "%@" + GroupCommunityServiceImpl.likeEscape(user.getUsername().toLowerCase(Locale.ROOT)) + "%"));
+                        }
                     }
                     if (seenAt != null) {
                         dto.setUnreadDocuments(documentRepository
@@ -265,17 +361,23 @@ public class GroupServiceImpl implements GroupService {
                 .sorted(Comparator
                         .comparing((User member) -> !member.getId().equals(creatorId))
                         .thenComparing(member -> member.getUsername().toLowerCase()))
-                .map(member -> mapToMember(member, creatorId))
+                .map(member -> mapToMember(group, member, creatorId))
                 .collect(Collectors.toList());
     }
 
-    private GroupMemberResponseDTO mapToMember(User member, Long creatorId) {
+    private GroupMemberResponseDTO mapToMember(PrivateGroup group, User member, Long creatorId) {
         GroupMemberResponseDTO dto = new GroupMemberResponseDTO();
         dto.setId(member.getId());
         dto.setUsername(member.getUsername());
         dto.setAvatarUrl(UserResponseDTO.avatarUrlFor(member.getId(), member.getAvatarVersion()));
-        dto.setGroupRole(member.getId().equals(creatorId) ? "CREATOR" : "MEMBER");
+        dto.setGroupRole(member.getId().equals(creatorId) ? "CREATOR"
+                : group.isModerator(member) ? "MODERATOR" : "MEMBER");
         dto.setAdvisor(member.isAdvisor());
+        if (member.getAvailability() != null && member.getAvailability() != Availability.INVISIBLE) {
+            dto.setAvailability(member.getAvailability().name());
+        }
+        dto.setStatusText(member.getStatusText());
+        dto.setStatusEmoji(member.getStatusEmoji());
         return dto;
     }
 
@@ -311,15 +413,13 @@ public class GroupServiceImpl implements GroupService {
         response.setId(group.getId());
         response.setName(group.getName());
         response.setDescription(group.getDescription());
-        String creator = group.getCreator() != null
-                ? group.getCreator().getUsername()
-                : (group.getMembers().isEmpty() ? "Sin miembros" : group.getMembers().iterator().next().getUsername());
-        response.setCreatorUsername(creator);
+        response.setCreatorUsername(group.getCreator() != null ? group.getCreator().getUsername() : null);
         response.setCode(group.getCode());
         response.setVisibility(group.isPrivate() ? GroupVisibility.PRIVATE : GroupVisibility.PUBLIC);
         response.setMember(isMember(group, viewer));
         response.setMemberCount(group.getMembers().size());
         response.setLastActivityAt(group.getLastActivityAt());
+        response.setCanManage(group.canManage(viewer));
         return response;
     }
 }

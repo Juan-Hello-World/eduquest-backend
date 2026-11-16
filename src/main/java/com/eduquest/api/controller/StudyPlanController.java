@@ -55,4 +55,12 @@ public class StudyPlanController {
             Authentication authentication) {
         return ResponseEntity.ok(studyPlanService.updateProgress(planId, request, authentication.getName()));
     }
+
+    @DeleteMapping("/{planId}")
+    @PreAuthorize("hasAuthority('ROLE_USER') or hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_MANAGER')")
+    @Operation(summary = "Eliminar plan", description = "404 si el plan no es del usuario.")
+    public ResponseEntity<Void> deletePlan(@PathVariable Long planId, Authentication authentication) {
+        studyPlanService.deletePlan(planId, authentication.getName());
+        return ResponseEntity.noContent().build();
+    }
 }

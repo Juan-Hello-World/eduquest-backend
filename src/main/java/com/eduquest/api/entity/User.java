@@ -59,8 +59,39 @@ public class User {
     @Column(name = "banned_at")
     private LocalDateTime bannedAt;
 
+    @Column(name = "banned_until")
+    private LocalDateTime bannedUntil;
+
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
+
+    @Column(name = "status_text", length = 80)
+    private String statusText;
+
+    @Column(name = "status_emoji", length = 16)
+    private String statusEmoji;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 12)
+    private Availability availability;
+
     @Column(name = "advisor")
     private Boolean advisor = false;
+
+    @Column(name = "email_verified")
+    private Boolean emailVerified;
+
+    @Column(name = "verification_code_hash")
+    private String verificationCodeHash;
+
+    @Column(name = "verification_expires_at")
+    private LocalDateTime verificationExpiresAt;
+
+    @Column(name = "verification_sent_at")
+    private LocalDateTime verificationSentAt;
+
+    @Column(name = "verification_attempts")
+    private Integer verificationAttempts;
 
     @Column(name = "reset_code_hash")
     private String resetCodeHash;
@@ -84,11 +115,27 @@ public class User {
     )
     private Set<Document> savedDocuments = new HashSet<>();
 
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "user_follows",
+            joinColumns = @JoinColumn(name = "follower_id"),
+            inverseJoinColumns = @JoinColumn(name = "followed_id")
+    )
+    private Set<User> following = new HashSet<>();
+
     public boolean isBanned() {
-        return Boolean.TRUE.equals(banned);
+        return Boolean.TRUE.equals(banned) && (bannedUntil == null || bannedUntil.isAfter(LocalDateTime.now()));
+    }
+
+    public boolean isEmailVerified() {
+        return !Boolean.FALSE.equals(emailVerified);
     }
 
     public boolean isAdvisor() {
         return Boolean.TRUE.equals(advisor);
+    }
+
+    public boolean hasRole(RoleName roleName) {
+        return roles != null && roles.stream().anyMatch(role -> role.getName() == roleName);
     }
 }

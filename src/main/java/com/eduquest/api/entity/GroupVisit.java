@@ -32,6 +32,13 @@ public class GroupVisit {
     @Column(name = "chat_seen_at")
     private LocalDateTime chatSeenAt;
 
+    @Column(name = "muted")
+    private Boolean muted = false;
+
+    public boolean isMuted() {
+        return Boolean.TRUE.equals(muted);
+    }
+
     public GroupVisit(User user, PrivateGroup group, LocalDateTime lastSeenAt) {
         this.user = user;
         this.group = group;

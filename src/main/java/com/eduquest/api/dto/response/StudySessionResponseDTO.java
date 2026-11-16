@@ -11,7 +11,13 @@ public class StudySessionResponseDTO {
     private String title;
     private String description;
     private LocalDateTime scheduledAt;
+    private LocalDateTime endsAt;
+    private boolean started;
+    private boolean checkInOpen;
+    private boolean checkedIn;
+    private int checkedInCount;
     private String meetingUrl;
+    private Long groupId;
     private String groupName;
     private String createdByUsername;
     private boolean canManage;

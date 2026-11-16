@@ -4,12 +4,19 @@ import com.eduquest.api.dto.request.ChangePasswordRequestDTO;
 import com.eduquest.api.dto.request.UpdateProfileRequestDTO;
 import com.eduquest.api.dto.response.AuthResponseDTO;
 import com.eduquest.api.dto.response.AvatarImageDTO;
+import com.eduquest.api.dto.response.DocumentResponseDTO;
+import com.eduquest.api.dto.response.PageResponseDTO;
+import com.eduquest.api.dto.response.PublicProfileDTO;
 import com.eduquest.api.dto.response.UserResponseDTO;
+import com.eduquest.api.dto.response.UserSummaryDTO;
 import com.eduquest.api.security.UserPrincipal;
 import com.eduquest.api.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -17,6 +24,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 @RestController
@@ -62,6 +70,41 @@ public class UserController {
     @Operation(summary = "Quitar foto de perfil")
     public ResponseEntity<Void> deleteAvatar(@AuthenticationPrincipal UserPrincipal principal) {
         userService.deleteAvatar(principal.getUsername());
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/me/following")
+    @Operation(summary = "Personas que sigo")
+    public ResponseEntity<List<UserSummaryDTO>> getFollowing(@AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(userService.getFollowing(principal.getUsername()));
+    }
+
+    @GetMapping("/{userId}/profile")
+    @Operation(summary = "Perfil público", description = "Puntos, insignias ganadas, estadísticas, seguidores y si lo sigues.")
+    public ResponseEntity<PublicProfileDTO> getPublicProfile(@PathVariable Long userId,
+                                                             @AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(userService.getPublicProfile(principal.getUsername(), userId));
+    }
+
+    @GetMapping("/{userId}/documents")
+    @Operation(summary = "Materiales públicos de un usuario", description = "Paginado; no incluye material de grupos.")
+    public ResponseEntity<PageResponseDTO<DocumentResponseDTO>> getPublicDocuments(
+            @PathVariable Long userId,
+            @PageableDefault(size = 6, sort = "uploadedAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        return ResponseEntity.ok(userService.getPublicDocuments(userId, pageable));
+    }
+
+    @PostMapping("/{userId}/follow")
+    @Operation(summary = "Seguir a un usuario", description = "Recibirás un aviso cuando comparta material en la biblioteca.")
+    public ResponseEntity<Void> follow(@PathVariable Long userId, @AuthenticationPrincipal UserPrincipal principal) {
+        userService.follow(principal.getUsername(), userId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/{userId}/follow")
+    @Operation(summary = "Dejar de seguir")
+    public ResponseEntity<Void> unfollow(@PathVariable Long userId, @AuthenticationPrincipal UserPrincipal principal) {
+        userService.unfollow(principal.getUsername(), userId);
         return ResponseEntity.noContent().build();
     }
 

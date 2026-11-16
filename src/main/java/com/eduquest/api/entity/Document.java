@@ -47,6 +47,13 @@ public class Document {
     @Column(nullable = false)
     private LocalDateTime uploadedAt = LocalDateTime.now();
 
+    @Column(name = "featured")
+    private Boolean featured = false;
+
+    public boolean isFeatured() {
+        return Boolean.TRUE.equals(featured);
+    }
+
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)

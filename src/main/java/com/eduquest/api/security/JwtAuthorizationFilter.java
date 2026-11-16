@@ -44,6 +44,11 @@ public class JwtAuthorizationFilter extends OncePerRequestFilter {
                         writeBannedResponse(request, response, principal);
                         return;
                     }
+                    if (userDetails instanceof UserPrincipal principal && !principal.isEmailVerified()
+                            && requiresVerifiedEmail(request)) {
+                        writeUnverifiedResponse(request, response);
+                        return;
+                    }
                     SecurityContext context = SecurityContextHolder.createEmptyContext();
                     UsernamePasswordAuthenticationToken authToken =
                             new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
@@ -57,10 +62,39 @@ public class JwtAuthorizationFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
+    static boolean requiresVerifiedEmail(HttpServletRequest request) {
+        String method = request.getMethod();
+        if ("GET".equals(method) || "HEAD".equals(method) || "OPTIONS".equals(method)) {
+            return false;
+        }
+        String path = request.getRequestURI();
+        return !(path.startsWith("/api/v1/auth/")
+                || path.startsWith("/api/v1/users/me")
+                || path.startsWith("/api/v1/notifications")
+                || path.endsWith("/seen")
+                || path.endsWith("/read"));
+    }
+
+    private void writeUnverifiedResponse(HttpServletRequest request, HttpServletResponse response) throws IOException {
+        String message = "Verifica tu correo para poder publicar y escribir en EduQuest";
+        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+        response.setContentType("application/problem+json");
+        response.setCharacterEncoding("UTF-8");
+        response.getWriter().write("{"
+                + "\"status\":403,"
+                + "\"title\":\"Forbidden\","
+                + "\"code\":\"EMAIL_NOT_VERIFIED\","
+                + "\"message\":" + json(message) + ","
+                + "\"detail\":" + json(message) + ","
+                + "\"path\":" + json(request.getRequestURI())
+                + "}");
+    }
+
     private void writeBannedResponse(HttpServletRequest request, HttpServletResponse response,
                                      UserPrincipal principal) throws IOException {
         String message = "Tu cuenta fue suspendida por incumplir las normas de EduQuest";
         String bannedAt = principal.getBannedAt() != null ? principal.getBannedAt().toString() : null;
+        String bannedUntil = principal.getBannedUntil() != null ? principal.getBannedUntil().toString() : null;
         response.setStatus(HttpServletResponse.SC_FORBIDDEN);
         response.setContentType("application/problem+json");
         response.setCharacterEncoding("UTF-8");
@@ -72,6 +106,7 @@ public class JwtAuthorizationFilter extends OncePerRequestFilter {
                 + "\"detail\":" + json(message) + ","
                 + "\"banReason\":" + json(principal.getBanReason()) + ","
                 + "\"bannedAt\":" + json(bannedAt) + ","
+                + "\"bannedUntil\":" + json(bannedUntil) + ","
                 + "\"path\":" + json(request.getRequestURI())
                 + "}");
     }

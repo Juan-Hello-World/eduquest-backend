@@ -55,6 +55,12 @@ public class DocumentController {
         return new ResponseEntity<>(documentService.getAllDocuments(search, tag, course, university, pageable), HttpStatus.OK);
     }
 
+    @GetMapping("/featured")
+    @Operation(summary = "Materiales destacados", description = "Hasta 6 materiales públicos marcados por la moderación.")
+    public ResponseEntity<List<DocumentResponseDTO>> getFeaturedDocuments() {
+        return ResponseEntity.ok(documentService.getFeaturedDocuments());
+    }
+
     @GetMapping("/saved")
     @Operation(summary = "Mis guardados", description = "Documentos que el usuario guardó como favoritos.")
     public ResponseEntity<PageResponseDTO<DocumentResponseDTO>> getSavedDocuments(
@@ -93,5 +99,22 @@ public class DocumentController {
             return Sort.by(Sort.Direction.ASC, "title");
         }
         return Sort.by(Sort.Direction.DESC, "uploadedAt");
+    }
+
+    @PutMapping("/{documentId}")
+    @PreAuthorize("hasAuthority('ROLE_USER') or hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_MANAGER')")
+    @Operation(summary = "Editar material", description = "Solo quien lo subió (o ADMIN).")
+    public ResponseEntity<DocumentResponseDTO> updateDocument(@PathVariable Long documentId,
+                                                              @Valid @RequestBody DocumentRequestDTO request,
+                                                              Authentication authentication) {
+        return ResponseEntity.ok(documentService.updateDocument(documentId, request, authentication.getName()));
+    }
+
+    @DeleteMapping("/{documentId}")
+    @PreAuthorize("hasAuthority('ROLE_USER') or hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_MANAGER')")
+    @Operation(summary = "Eliminar material", description = "Solo quien lo subió (o ADMIN). Borra también sus reseñas y el archivo subido.")
+    public ResponseEntity<Void> deleteDocument(@PathVariable Long documentId, Authentication authentication) {
+        documentService.deleteOwnDocument(documentId, authentication.getName());
+        return ResponseEntity.noContent().build();
     }
 }

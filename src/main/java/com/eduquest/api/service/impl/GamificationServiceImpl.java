@@ -34,7 +34,9 @@ public class GamificationServiceImpl implements GamificationService {
     static final int DOCUMENT_POINTS = 10;
     static final int REVIEW_POINTS = 5;
     static final int SESSION_POINTS = 8;
+    static final int CONFIRMATION_POINTS = 1;
     static final int ATTENDANCE_POINTS = 3;
+    static final int NO_SHOW_PENALTY = 3;
     static final int SESSION_REVIEW_POINTS = 4;
     private static final int LEADERBOARD_SIZE = 10;
     private static final LocalDateTime BEGINNING = LocalDateTime.of(2000, 1, 1, 0, 0);
@@ -69,13 +71,23 @@ public class GamificationServiceImpl implements GamificationService {
     @Override
     @Transactional(readOnly = true)
     public GamificationProfileDTO getProfile(String username) {
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado"));
+        return profileOf(userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado")));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public GamificationProfileDTO getProfile(Long userId) {
+        return profileOf(userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado")));
+    }
+
+    private GamificationProfileDTO profileOf(User user) {
         Long userId = user.getId();
         GamificationStatsDTO stats = statsFor(userId);
 
-        long points = pointsFor(stats);
-        long weeklyPoints = pointsSince(LocalDateTime.now().minusDays(7)).getOrDefault(userId, 0L);
+        long points = Math.max(0, pointsFor(stats));
+        long weeklyPoints = Math.max(0, pointsSince(LocalDateTime.now().minusDays(7)).getOrDefault(userId, 0L));
 
         Integer rank = null;
         if (points > 0) {
@@ -143,7 +155,9 @@ public class GamificationServiceImpl implements GamificationService {
                 documentRepository.countByAuthorId(userId),
                 reviewRepository.countByAuthorId(userId),
                 sessionRepository.countByCreatedById(userId),
-                attendanceRepository.countByUserId(userId),
+                attendanceRepository.countConfirmedByUserId(userId),
+                attendanceRepository.countByUserIdAndCheckedInAtIsNotNull(userId),
+                attendanceRepository.countNoShowsByUserId(userId, LocalDateTime.now()),
                 sessionReviewRepository.countByAuthorId(userId));
     }
 
@@ -152,7 +166,9 @@ public class GamificationServiceImpl implements GamificationService {
         addPoints(points, documentRepository.countByAuthorSince(since), DOCUMENT_POINTS);
         addPoints(points, reviewRepository.countByAuthorSince(since), REVIEW_POINTS);
         addPoints(points, sessionRepository.countByCreatorSince(since), SESSION_POINTS);
-        addPoints(points, attendanceRepository.countByUserSince(since), ATTENDANCE_POINTS);
+        addPoints(points, attendanceRepository.countConfirmedByUserSince(since), CONFIRMATION_POINTS);
+        addPoints(points, attendanceRepository.countCheckInsByUserSince(since), ATTENDANCE_POINTS);
+        addPoints(points, attendanceRepository.countNoShowsByUserSince(since, LocalDateTime.now()), -NO_SHOW_PENALTY);
         addPoints(points, sessionReviewRepository.countByAuthorSince(since), SESSION_REVIEW_POINTS);
         return points;
     }
@@ -169,7 +185,9 @@ public class GamificationServiceImpl implements GamificationService {
         return stats.documents() * DOCUMENT_POINTS
                 + stats.reviews() * REVIEW_POINTS
                 + stats.sessionsHosted() * SESSION_POINTS
+                + stats.confirmations() * CONFIRMATION_POINTS
                 + stats.attendances() * ATTENDANCE_POINTS
+                - stats.noShows() * NO_SHOW_PENALTY
                 + stats.sessionReviews() * SESSION_REVIEW_POINTS;
     }
 
@@ -184,7 +202,7 @@ public class GamificationServiceImpl implements GamificationService {
         badges.add(new BadgeDTO("ORGANIZER", "Organizador",
                 "Agenda 3 asesorías", stats.sessionsHosted() >= 3));
         badges.add(new BadgeDTO("LOYAL", "Asistente fiel",
-                "Confirma tu asistencia a 5 asesorías", stats.attendances() >= 5));
+                "Asiste a 5 asesorías", stats.attendances() >= 5));
         badges.add(new BadgeDTO("PLANNER", "Planificador",
                 "Completa todos los pasos de un plan de estudio", hasFinishedPlan(user)));
         badges.add(new BadgeDTO("TOP_ADVISOR", "Asesor top",

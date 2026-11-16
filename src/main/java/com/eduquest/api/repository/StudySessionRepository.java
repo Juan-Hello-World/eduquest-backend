@@ -14,9 +14,19 @@ import java.util.Optional;
 public interface StudySessionRepository extends JpaRepository<StudySession, Long> {
     List<StudySession> findByPrivateGroupId(Long groupId);
 
+    List<StudySession> findByEndsAtIsNull();
+
+    @Query("SELECT s FROM StudySession s JOIN s.privateGroup g JOIN g.members m "
+            + "WHERE m.id = :userId AND s.scheduledAt >= :from AND s.scheduledAt < :to ORDER BY s.scheduledAt")
+    List<StudySession> findForMemberBetween(@Param("userId") Long userId,
+                                           @Param("from") java.time.LocalDateTime from,
+                                           @Param("to") java.time.LocalDateTime to);
+
     Optional<StudySession> findByIdAndPrivateGroupId(Long id, Long groupId);
 
     long countByCreatedById(Long userId);
+
+    long countByCreatedAtAfter(LocalDateTime after);
 
     @Query("SELECT s.createdBy.id, COUNT(s) FROM StudySession s WHERE s.createdAt >= :since GROUP BY s.createdBy.id")
     List<Object[]> countByCreatorSince(@Param("since") LocalDateTime since);

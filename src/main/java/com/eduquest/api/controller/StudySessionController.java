@@ -75,12 +75,22 @@ public class StudySessionController {
 
     @PostMapping("/{sessionId}/attendance")
     @PreAuthorize("hasAuthority('ROLE_USER') or hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_MANAGER')")
-    @Operation(summary = "Confirmar asistencia", description = "Marca que el usuario asistirá. 400 si la sesión ya terminó.")
+    @Operation(summary = "Confirmar asistencia", description = "Marca que el usuario asistirá. Solo antes de que empiece la sesión.")
     public ResponseEntity<StudySessionResponseDTO> attend(
             @PathVariable Long groupId,
             @PathVariable Long sessionId,
             Authentication authentication) {
         return ResponseEntity.ok(studySessionService.setAttendance(groupId, sessionId, authentication.getName(), true));
+    }
+
+    @PostMapping("/{sessionId}/check-in")
+    @PreAuthorize("hasAuthority('ROLE_USER') or hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_MANAGER')")
+    @Operation(summary = "Unirme ahora", description = "Registra que el usuario entró a la sesión. Solo desde 10 minutos antes del inicio hasta la hora de fin.")
+    public ResponseEntity<StudySessionResponseDTO> checkIn(
+            @PathVariable Long groupId,
+            @PathVariable Long sessionId,
+            Authentication authentication) {
+        return ResponseEntity.ok(studySessionService.checkIn(groupId, sessionId, authentication.getName()));
     }
 
     @DeleteMapping("/{sessionId}/attendance")

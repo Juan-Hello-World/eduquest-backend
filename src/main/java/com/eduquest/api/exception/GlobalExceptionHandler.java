@@ -3,8 +3,10 @@ package com.eduquest.api.exception;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
@@ -72,7 +74,18 @@ public class GlobalExceptionHandler {
         problemDetail.setProperty("code", UserBannedException.CODE);
         problemDetail.setProperty("banReason", ex.getReason());
         problemDetail.setProperty("bannedAt", ex.getBannedAt() != null ? ex.getBannedAt().toString() : null);
+        problemDetail.setProperty("bannedUntil", ex.getBannedUntil() != null ? ex.getBannedUntil().toString() : null);
         return problemDetail;
+    }
+
+    @ExceptionHandler(TooManyAttemptsException.class)
+    public ResponseEntity<ProblemDetail> handleTooManyAttempts(TooManyAttemptsException ex, HttpServletRequest request) {
+        ProblemDetail problemDetail = buildProblemDetail(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage(), request);
+        problemDetail.setProperty("code", "TOO_MANY_ATTEMPTS");
+        problemDetail.setProperty("retryAfterSeconds", ex.getRetryAfterSeconds());
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, String.valueOf(ex.getRetryAfterSeconds()))
+                .body(problemDetail);
     }
 
     @ExceptionHandler(ForbiddenException.class)
@@ -100,7 +113,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ProblemDetail handleMaxUploadSize(MaxUploadSizeExceededException ex, HttpServletRequest request) {
-        return buildProblemDetail(HttpStatus.BAD_REQUEST, "La imagen no debe superar los 2 MB", request);
+        return buildProblemDetail(HttpStatus.BAD_REQUEST, "El archivo es demasiado grande. El máximo es 10 MB", request);
     }
 
     @ExceptionHandler(MissingServletRequestPartException.class)

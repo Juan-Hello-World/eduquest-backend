@@ -2,8 +2,11 @@ package com.eduquest.api.controller;
 
 import com.eduquest.api.dto.request.AnnouncementRequestDTO;
 import com.eduquest.api.dto.request.ReportStatusRequestDTO;
+import com.eduquest.api.dto.response.AdminStatsDTO;
+import com.eduquest.api.dto.response.DocumentResponseDTO;
 import com.eduquest.api.dto.response.PageResponseDTO;
 import com.eduquest.api.dto.response.ReportResponseDTO;
+import com.eduquest.api.service.AdminService;
 import com.eduquest.api.service.DocumentService;
 import com.eduquest.api.service.NotificationService;
 import com.eduquest.api.service.ReportService;
@@ -23,18 +26,20 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/admin")
 @PreAuthorize("hasAuthority('ROLE_ADMIN') or hasAuthority('ROLE_MANAGER')")
-@Tag(name = "Moderación", description = "Bandeja de reportes (ADMIN o MANAGER). Eliminar material y enviar avisos requiere ROLE_ADMIN.")
+@Tag(name = "Moderación", description = "Reportes, materiales destacados, eliminación de material y estadísticas (ADMIN o MANAGER). Los avisos generales son solo de ROLE_ADMIN.")
 public class ModerationController {
 
     private final ReportService reportService;
     private final DocumentService documentService;
     private final NotificationService notificationService;
+    private final AdminService adminService;
 
     public ModerationController(ReportService reportService, DocumentService documentService,
-                                NotificationService notificationService) {
+                                NotificationService notificationService, AdminService adminService) {
         this.reportService = reportService;
         this.documentService = documentService;
         this.notificationService = notificationService;
+        this.adminService = adminService;
     }
 
     @PostMapping("/notifications")
@@ -69,9 +74,21 @@ public class ModerationController {
         return ResponseEntity.ok(reportService.updateStatus(reportId, request.getStatus(), authentication.getName()));
     }
 
+    @GetMapping("/stats")
+    @Operation(summary = "Resumen de la plataforma", description = "Usuarios, materiales, grupos, sesiones y reportes abiertos.")
+    public ResponseEntity<AdminStatsDTO> getStats() {
+        return ResponseEntity.ok(adminService.getStats());
+    }
+
+    @PatchMapping("/documents/{documentId}/featured")
+    @Operation(summary = "Destacar material", description = "ADMIN o MANAGER. Con featured=false lo quita de destacados.")
+    public ResponseEntity<DocumentResponseDTO> setFeatured(@PathVariable Long documentId,
+                                                           @RequestParam(defaultValue = "true") boolean featured) {
+        return ResponseEntity.ok(documentService.setFeatured(documentId, featured));
+    }
+
     @DeleteMapping("/documents/{documentId}")
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
-    @Operation(summary = "Eliminar material", description = "Solo ADMIN. Borra el documento junto con sus reseñas.")
+    @Operation(summary = "Eliminar material", description = "ADMIN o MANAGER. Borra el documento junto con sus reseñas.")
     public ResponseEntity<Void> deleteDocument(@PathVariable Long documentId) {
         documentService.deleteDocument(documentId);
         return ResponseEntity.noContent().build();

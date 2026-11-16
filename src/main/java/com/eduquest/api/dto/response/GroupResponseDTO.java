@@ -22,4 +22,7 @@ public class GroupResponseDTO {
     private long unreadSessions;
     private long unreadCount;
     private long unreadMessages;
+    private boolean muted;
+    private boolean canManage;
+    private long unreadMentions;
 }

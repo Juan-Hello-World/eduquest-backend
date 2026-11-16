@@ -46,6 +46,14 @@ List<Object[]> countByAuthorSince(@Param("since") java.time.LocalDateTime since)
 
 Page<Document> findByGroupId(Long groupId, Pageable pageable);
 
+List<Document> findAllByGroupId(Long groupId);
+
+List<Document> findTop6ByFeaturedTrueAndGroupIsNullOrderByUploadedAtDesc();
+
+long countByUploadedAtAfter(java.time.LocalDateTime after);
+
 long countByGroupIdAndUploadedAtAfterAndAuthorIdNot(Long groupId, java.time.LocalDateTime after, Long authorId);
 Page<Document> findByGroupIsNull(Pageable pageable);
+
+Page<Document> findByAuthorIdAndGroupIsNull(Long authorId, Pageable pageable);
 }

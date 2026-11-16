@@ -23,6 +23,8 @@ public class StudySessionRequestDTO {
     @Future(message = "La sesión debe programarse en una fecha futura")
     private LocalDateTime scheduledAt;
 
+    private LocalDateTime endsAt;
+
     @NotBlank(message = "El enlace de la reunión es obligatorio")
     @Pattern(regexp = "^https?://\\S+$", message = "El enlace de la reunión debe comenzar con http:// o https://")
     @Size(max = 255, message = "El enlace de la reunión es demasiado largo")

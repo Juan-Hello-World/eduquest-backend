@@ -14,6 +14,7 @@ import com.eduquest.api.entity.StudySession;
 import com.eduquest.api.entity.User;
 import com.eduquest.api.event.OnGroupActivityEvent;
 import com.eduquest.api.event.OnUserActivityEvent;
+import com.eduquest.api.exception.BadRequestException;
 import com.eduquest.api.exception.DuplicateResourceException;
 import com.eduquest.api.exception.ForbiddenException;
 import com.eduquest.api.exception.InvalidOperationException;
@@ -29,12 +30,16 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
 @Service
 public class StudySessionServiceImpl implements StudySessionService {
+
+    private static final int MAX_DURATION_HOURS = 8;
+    private static final int MAX_CALENDAR_DAYS = 62;
 
     private final StudySessionRepository sessionRepository;
     private final PrivateGroupRepository groupRepository;
@@ -79,6 +84,7 @@ public class StudySessionServiceImpl implements StudySessionService {
         session.setTitle(request.getTitle());
         session.setDescription(request.getDescription());
         session.setScheduledAt(request.getScheduledAt());
+        session.setEndsAt(resolveEnd(request));
         session.setMeetingUrl(request.getMeetingUrl().trim());
         session.setPrivateGroup(group);
         session.setCreatedBy(user);
@@ -93,6 +99,22 @@ public class StudySessionServiceImpl implements StudySessionService {
         return mapToResponse(saved, user);
     }
 
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<StudySessionResponseDTO> getMySessions(String username, LocalDate from, LocalDate to) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado"));
+        if (!to.isAfter(from)) {
+            throw new BadRequestException("La fecha final debe ser posterior a la inicial");
+        }
+        if (from.plusDays(MAX_CALENDAR_DAYS).isBefore(to)) {
+            throw new BadRequestException("El rango no puede superar los " + MAX_CALENDAR_DAYS + " días");
+        }
+        return sessionRepository.findForMemberBetween(user.getId(), from.atStartOfDay(), to.atStartOfDay()).stream()
+                .map(session -> mapToResponse(session, user))
+                .toList();
+    }
 
     @Override
     @Transactional(readOnly = true)
@@ -126,6 +148,7 @@ public class StudySessionServiceImpl implements StudySessionService {
         session.setTitle(request.getTitle());
         session.setDescription(request.getDescription());
         session.setScheduledAt(request.getScheduledAt());
+        session.setEndsAt(resolveEnd(request));
         session.setMeetingUrl(request.getMeetingUrl().trim());
 
         return mapToResponse(sessionRepository.save(session), user);
@@ -144,8 +167,8 @@ public class StudySessionServiceImpl implements StudySessionService {
         User user = findUser(username);
         requireMember(groupId, user);
         StudySession session = findSession(groupId, sessionId);
-        if (session.isFinished()) {
-            throw new InvalidOperationException("La sesión ya terminó");
+        if (session.hasStarted()) {
+            throw new InvalidOperationException("La sesión ya empezó: entra con «Unirme ahora» para registrar tu asistencia");
         }
 
         boolean alreadyAttending = isAttending(session, user);
@@ -156,6 +179,48 @@ public class StudySessionServiceImpl implements StudySessionService {
             session.getAttendances().removeIf(attendance -> attendance.getUser().getId().equals(user.getId()));
         }
         return mapToResponse(sessionRepository.save(session), user);
+    }
+
+    @Override
+    @Transactional
+    public StudySessionResponseDTO checkIn(Long groupId, Long sessionId, String username) {
+        User user = findUser(username);
+        requireMember(groupId, user);
+        StudySession session = findSession(groupId, sessionId);
+        if (!session.isCheckInOpen()) {
+            throw new InvalidOperationException(session.isFinished()
+                    ? "La sesión ya terminó"
+                    : "Podrás unirte desde " + StudySession.CHECK_IN_EARLY_MINUTES + " minutos antes de que empiece");
+        }
+
+        SessionAttendance attendance = session.getAttendances().stream()
+                .filter(item -> item.getUser().getId().equals(user.getId()))
+                .findFirst()
+                .orElseGet(() -> {
+                    SessionAttendance walkIn = new SessionAttendance(session, user, LocalDateTime.now());
+                    walkIn.setConfirmed(false);
+                    session.getAttendances().add(walkIn);
+                    return walkIn;
+                });
+        if (attendance.getCheckedInAt() == null) {
+            attendance.setCheckedInAt(LocalDateTime.now());
+            eventPublisher.publishEvent(new OnUserActivityEvent(this, user.getId()));
+        }
+        return mapToResponse(sessionRepository.save(session), user);
+    }
+
+    private static LocalDateTime resolveEnd(StudySessionRequestDTO request) {
+        LocalDateTime start = request.getScheduledAt();
+        LocalDateTime end = request.getEndsAt() != null
+                ? request.getEndsAt()
+                : start.plusMinutes(StudySession.DEFAULT_DURATION_MINUTES);
+        if (!end.isAfter(start)) {
+            throw new InvalidOperationException("La hora de fin debe ser posterior a la de inicio");
+        }
+        if (end.isAfter(start.plusHours(MAX_DURATION_HOURS))) {
+            throw new InvalidOperationException("Una sesión puede durar como máximo " + MAX_DURATION_HOURS + " horas");
+        }
+        return end;
     }
 
     @Override
@@ -234,7 +299,7 @@ public class StudySessionServiceImpl implements StudySessionService {
 
     private boolean isAttending(StudySession session, User user) {
         return session.getAttendances().stream()
-                .anyMatch(attendance -> attendance.getUser().getId().equals(user.getId()));
+                .anyMatch(attendance -> attendance.isConfirmed() && attendance.getUser().getId().equals(user.getId()));
     }
 
     private boolean hasReviewed(StudySession session, User user) {
@@ -269,7 +334,9 @@ public class StudySessionServiceImpl implements StudySessionService {
         dto.setTitle(session.getTitle());
         dto.setDescription(session.getDescription());
         dto.setScheduledAt(session.getScheduledAt());
+        dto.setEndsAt(session.getEffectiveEnd());
         dto.setMeetingUrl(session.getMeetingUrl());
+        dto.setGroupId(session.getPrivateGroup() != null ? session.getPrivateGroup().getId() : null);
         dto.setGroupName(session.getPrivateGroup() != null ? session.getPrivateGroup().getName() : null);
         dto.setCreatedByUsername(session.getCreatedBy() != null ? session.getCreatedBy().getUsername() : null);
         dto.setCanManage(canManage(session, viewer));
@@ -278,8 +345,13 @@ public class StudySessionServiceImpl implements StudySessionService {
         boolean finished = session.isFinished();
         boolean reviewedByMe = hasReviewed(session, viewer);
         dto.setFinished(finished);
-        dto.setAttendeeCount(session.getAttendances().size());
+        dto.setStarted(session.hasStarted());
+        dto.setCheckInOpen(session.isCheckInOpen());
+        dto.setAttendeeCount((int) session.getAttendances().stream().filter(SessionAttendance::isConfirmed).count());
+        dto.setCheckedInCount((int) session.getAttendances().stream().filter(SessionAttendance::isCheckedIn).count());
         dto.setAttending(isAttending(session, viewer));
+        dto.setCheckedIn(session.getAttendances().stream()
+                .anyMatch(attendance -> attendance.isCheckedIn() && attendance.getUser().getId().equals(viewer.getId())));
         dto.setReviewCount(session.getReviews().size());
         dto.setAverageRating(session.getReviews().isEmpty() ? null : session.getReviews().stream()
                 .mapToInt(SessionReview::getRating)

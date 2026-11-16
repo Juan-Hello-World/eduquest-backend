@@ -11,4 +11,7 @@ public class GroupMemberResponseDTO {
     private String avatarUrl;
     private String groupRole;
     private boolean advisor;
+    private String availability;
+    private String statusText;
+    private String statusEmoji;
 }

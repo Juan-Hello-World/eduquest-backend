@@ -10,4 +10,5 @@ public interface StudyPlanService {
     StudyPlanResponseDTO generateStudyPlan(StudyPlanRequestDTO request, String username);
     List<StudyPlanResponseDTO> getMyStudyPlans(String username);
     StudyPlanResponseDTO updateProgress(Long planId, StudyPlanProgressRequestDTO request, String username);
+    void deletePlan(Long planId, String username);
 }

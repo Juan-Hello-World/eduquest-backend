@@ -19,5 +19,10 @@ public interface DocumentService {
     PageResponseDTO<DocumentResponseDTO> getSavedDocuments(String username, Pageable pageable);
     List<Long> getSavedDocumentIds(String username);
     void deleteDocument(Long documentId);
+    DocumentResponseDTO updateDocument(Long documentId, DocumentRequestDTO request, String username);
+    void deleteOwnDocument(Long documentId, String username);
+    DocumentResponseDTO setFeatured(Long documentId, boolean featured);
+    List<DocumentResponseDTO> getFeaturedDocuments();
+    PageResponseDTO<DocumentResponseDTO> getPublicDocumentsByAuthor(Long authorId, Pageable pageable);
     PageResponseDTO<DocumentResponseDTO> getDocumentsByGroup(Long groupId, String username, Pageable pageable);
 }

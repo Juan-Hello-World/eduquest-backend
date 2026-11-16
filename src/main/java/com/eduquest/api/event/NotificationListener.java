@@ -32,6 +32,12 @@ public class NotificationListener {
 
     @Async("taskExecutor")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void handlePublicDocument(OnPublicDocumentEvent event) {
+        notificationService.notifyFollowers(event.getAuthorId(), event.getDocumentTitle());
+    }
+
+    @Async("taskExecutor")
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handleUserActivity(OnUserActivityEvent event) {
         gamificationService.syncBadges(event.getUserId());
     }

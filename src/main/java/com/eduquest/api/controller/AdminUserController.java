@@ -1,6 +1,7 @@
 package com.eduquest.api.controller;
 
 import com.eduquest.api.dto.request.BanUserRequestDTO;
+import com.eduquest.api.dto.request.WarningRequestDTO;
 import com.eduquest.api.dto.response.PageResponseDTO;
 import com.eduquest.api.dto.response.UserResponseDTO;
 import com.eduquest.api.service.AdminService;
@@ -48,18 +49,25 @@ public class AdminUserController {
         return ResponseEntity.ok(adminService.updateUserRole(id, role));
     }
 
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
-    @Operation(summary = "Vetar usuario", description = "Solo ADMIN. Bloquea el acceso del usuario por incumplir las normas; el motivo se le muestra al intentar entrar.")
+    @Operation(summary = "Suspender o vetar usuario", description = "Con days suspende por esos días; sin days veta de forma permanente (solo ADMIN). Un MANAGER puede suspender estudiantes hasta 7 días.")
     @PatchMapping("/{id}/ban")
     public ResponseEntity<UserResponseDTO> banUser(
             @PathVariable Long id,
             @Valid @RequestBody BanUserRequestDTO request,
             Authentication authentication) {
-        return ResponseEntity.ok(adminService.banUser(id, request.getReason(), authentication.getName()));
+        return ResponseEntity.ok(adminService.banUser(id, request.getReason(), request.getDays(), authentication.getName()));
     }
 
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
-    @Operation(summary = "Quitar veto", description = "Solo ADMIN. Devuelve el acceso a un usuario vetado.")
+    @Operation(summary = "Enviar advertencia", description = "ADMIN o MANAGER. Le llega al usuario como notificación.")
+    @PostMapping("/{id}/warning")
+    public ResponseEntity<Void> warnUser(@PathVariable Long id,
+                                         @Valid @RequestBody WarningRequestDTO request,
+                                         Authentication authentication) {
+        adminService.warnUser(id, request.getMessage(), authentication.getName());
+        return ResponseEntity.noContent().build();
+    }
+
+    @Operation(summary = "Quitar veto o suspensión", description = "ADMIN o MANAGER. Devuelve el acceso a un usuario.")
     @PatchMapping("/{id}/unban")
     public ResponseEntity<UserResponseDTO> unbanUser(@PathVariable Long id) {
         return ResponseEntity.ok(adminService.unbanUser(id));
