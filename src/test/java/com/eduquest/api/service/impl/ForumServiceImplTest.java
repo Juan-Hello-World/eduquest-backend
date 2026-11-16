@@ -13,6 +13,7 @@ import com.eduquest.api.entity.User;
 import com.eduquest.api.exception.BadRequestException;
 import com.eduquest.api.exception.ForbiddenException;
 import com.eduquest.api.exception.ResourceNotFoundException;
+import com.eduquest.api.realtime.RealtimeEvent;
 import com.eduquest.api.repository.ForumAnswerRepository;
 import com.eduquest.api.repository.ForumQuestionRepository;
 import com.eduquest.api.repository.ForumVoteRepository;
@@ -26,6 +27,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 
@@ -52,6 +54,7 @@ class ForumServiceImplTest {
     @Mock ForumVoteRepository voteRepository;
     @Mock UserRepository userRepository;
     @Mock NotificationService notificationService;
+    @Mock ApplicationEventPublisher eventPublisher;
 
     @InjectMocks ForumServiceImpl forumService;
 
@@ -141,6 +144,16 @@ class ForumServiceImplTest {
 
         forumService.answer("alice", 10L, "Gracias");
         verify(notificationService, org.mockito.Mockito.times(1)).notifyForumActivity(any(), anyString(), anyString(), any());
+    }
+
+    @Test
+    void answer_broadcastsForumChange() {
+        forumService.answer("bob", 10L, "Usa LIATE");
+
+        org.mockito.ArgumentCaptor<RealtimeEvent> captor = org.mockito.ArgumentCaptor.forClass(RealtimeEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        assertThat(captor.getValue().isBroadcast()).isTrue();
+        assertThat(captor.getValue().getPayload()).containsEntry("type", "forum").containsEntry("questionId", 10L);
     }
 
     @Test

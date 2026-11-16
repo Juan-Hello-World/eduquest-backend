@@ -20,4 +20,15 @@ class RealtimeListenerTest {
 
         verify(handler).sendToUsers(List.of(1L, 2L), payload);
     }
+
+    @Test
+    void handle_broadcastGoesToEveryone() {
+        ChatSocketHandler handler = mock(ChatSocketHandler.class);
+        RealtimeListener listener = new RealtimeListener(handler);
+        Map<String, Object> payload = Map.of("type", "forum");
+
+        listener.handle(RealtimeEvent.toEveryone(this, payload));
+
+        verify(handler).sendToAll(payload);
+    }
 }

@@ -15,12 +15,14 @@ import com.eduquest.api.entity.User;
 import com.eduquest.api.exception.BadRequestException;
 import com.eduquest.api.exception.ForbiddenException;
 import com.eduquest.api.exception.ResourceNotFoundException;
+import com.eduquest.api.realtime.RealtimeEvent;
 import com.eduquest.api.repository.ForumAnswerRepository;
 import com.eduquest.api.repository.ForumQuestionRepository;
 import com.eduquest.api.repository.ForumVoteRepository;
 import com.eduquest.api.repository.UserRepository;
 import com.eduquest.api.service.ForumService;
 import com.eduquest.api.service.NotificationService;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -44,17 +46,20 @@ public class ForumServiceImpl implements ForumService {
     private final ForumVoteRepository voteRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public ForumServiceImpl(ForumQuestionRepository questionRepository,
                             ForumAnswerRepository answerRepository,
                             ForumVoteRepository voteRepository,
                             UserRepository userRepository,
-                            NotificationService notificationService) {
+                            NotificationService notificationService,
+                            ApplicationEventPublisher eventPublisher) {
         this.questionRepository = questionRepository;
         this.answerRepository = answerRepository;
         this.voteRepository = voteRepository;
         this.userRepository = userRepository;
         this.notificationService = notificationService;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -94,7 +99,9 @@ public class ForumServiceImpl implements ForumService {
         question.setCourse(request.getCourse() == null || request.getCourse().isBlank() ? null : request.getCourse().trim());
         question.setAuthor(author);
         question.setCreatedAt(LocalDateTime.now());
-        return toResponse(questionRepository.save(question), 0, author);
+        ForumQuestion saved = questionRepository.save(question);
+        publishChange(saved.getId());
+        return toResponse(saved, 0, author);
     }
 
     @Override
@@ -114,6 +121,7 @@ public class ForumServiceImpl implements ForumService {
         voteRepository.deleteByQuestionId(questionId);
         answerRepository.deleteByQuestionId(questionId);
         questionRepository.delete(question);
+        publishChange(questionId);
     }
 
     @Override
@@ -131,6 +139,7 @@ public class ForumServiceImpl implements ForumService {
             notificationService.notifyForumActivity(question.getAuthor(),
                     "@" + author.getUsername() + " respondió tu pregunta", question.getTitle(), questionId);
         }
+        publishChange(questionId);
         return toResponse(saved, 0, 0, false, author);
     }
 
@@ -149,6 +158,7 @@ public class ForumServiceImpl implements ForumService {
         }
         voteRepository.deleteByAnswerId(answerId);
         answerRepository.delete(answer);
+        publishChange(question.getId());
     }
 
     @Override
@@ -175,6 +185,7 @@ public class ForumServiceImpl implements ForumService {
             voteRepository.save(vote);
         }
         voteRepository.flush();
+        publishChange(answer.getQuestion().getId());
         boolean accepted = answerId.equals(answer.getQuestion().getAcceptedAnswerId());
         return toResponse(answer, voteRepository.scoreOf(answerId), normalized, accepted, user);
     }
@@ -194,6 +205,7 @@ public class ForumServiceImpl implements ForumService {
         boolean unmark = answerId.equals(question.getAcceptedAnswerId());
         question.setAcceptedAnswerId(unmark ? null : answerId);
         questionRepository.save(question);
+        publishChange(questionId);
         if (!unmark && !answer.getAuthor().getId().equals(user.getId())) {
             notificationService.notifyForumActivity(answer.getAuthor(),
                     "Tu respuesta fue elegida como la mejor", question.getTitle(), questionId);
@@ -258,5 +270,12 @@ public class ForumServiceImpl implements ForumService {
         return new ForumAnswerResponseDTO(answer.getId(), answer.getBody(), summary(answer.getAuthor()), answer.getCreatedAt(),
                 score, myVote, accepted, answer.getAuthor().getId().equals(viewer.getId()),
                 canModerate(viewer, answer.getAuthor()));
+    }
+
+    private void publishChange(Long questionId) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("type", "forum");
+        payload.put("questionId", questionId);
+        eventPublisher.publishEvent(RealtimeEvent.toEveryone(this, payload));
     }
 }

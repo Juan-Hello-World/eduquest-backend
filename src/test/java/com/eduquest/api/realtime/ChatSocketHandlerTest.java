@@ -69,6 +69,19 @@ class ChatSocketHandlerTest {
     }
 
     @Test
+    void sendToAll_deliversToEveryConnectedUser() throws Exception {
+        WebSocketSession alice = session("a", 1L, "alice");
+        WebSocketSession bob = session("b", 2L, "bob");
+        handler.afterConnectionEstablished(alice);
+        handler.afterConnectionEstablished(bob);
+
+        handler.sendToAll(Map.of("type", "forum"));
+
+        assertThat(lastSent(alice)).contains("forum");
+        assertThat(lastSent(bob)).contains("forum");
+    }
+
+    @Test
     void ping_repliesWithPong() throws Exception {
         WebSocketSession alice = session("a", 1L, "alice");
         handler.afterConnectionEstablished(alice);

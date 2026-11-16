@@ -15,6 +15,10 @@ public class RealtimeListener {
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void handle(RealtimeEvent event) {
-        socketHandler.sendToUsers(event.getUserIds(), event.getPayload());
+        if (event.isBroadcast()) {
+            socketHandler.sendToAll(event.getPayload());
+        } else {
+            socketHandler.sendToUsers(event.getUserIds(), event.getPayload());
+        }
     }
 }

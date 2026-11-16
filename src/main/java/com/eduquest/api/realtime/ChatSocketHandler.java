@@ -79,6 +79,10 @@ public class ChatSocketHandler extends TextWebSocketHandler implements PresenceS
         }
     }
 
+    public void sendToAll(Object payload) {
+        sendToUsers(List.copyOf(sessions.keySet()), payload);
+    }
+
     public void sendToUsers(Collection<Long> userIds, Object payload) {
         String json;
         try {
