@@ -68,22 +68,42 @@ Una plataforma que centralice materiales confiables, grupos privados de asesorí
 - **Consulta del perfil propio:** endpoint protegido `/users/me` que expone los datos y roles del usuario autenticado.
 - **Biblioteca de documentos:** subir y listar materiales académicos en la biblioteca abierta.
 - **Grupos privados:** crear grupos de estudio y listar los existentes.
-- **Sesiones de asesoría:** reservar y listar sesiones de estudio dentro de un grupo privado, con enlace de reunión.
+- **Sesiones de asesoría:** reservar y listar sesiones de estudio dentro de un grupo privado, con enlace de reunión, hora de inicio y hora de fin (máximo 8 horas).
 - **Plan de estudio personalizado:** el usuario ingresa un curso y su dificultad percibida; el backend devuelve una metodología de estudio generada. Si el proveedor externo no está disponible (por ejemplo, sin créditos), se devuelve un plan base generado localmente para no interrumpir la experiencia.
 - **Reseñas:** calificar y comentar documentos (1–5 estrellas) con validación de una reseña por usuario y por documento.
 - **Administración de usuarios:** el rol ADMIN/MANAGER puede listar usuarios y el ADMIN puede cambiar roles.
+- **Gestor (MANAGER) como moderador:** suspende estudiantes por 1, 3 o 7 días, envía advertencias, elimina materiales reportados, marca materiales como destacados y consulta un resumen de estadísticas de la plataforma. Solo el ADMIN puede vetar de forma permanente o suspender a otros gestores.
 - **Perfil de asesor:** al registrarse o desde el perfil, el usuario puede marcarse como asesor; se muestra en miembros, sesiones, chat y ranking.
 - **Biblioteca con curso y universidad:** cada material puede indicar su curso y su universidad o colegio, y la biblioteca filtra por ambos.
 - **Favoritos:** guardar materiales en "Mis guardados".
-- **Chat de grupo:** mensajes entre los miembros del grupo con historial paginado y actualización periódica desde los clientes.
-- **Asistencia y reseñas de asesorías:** confirmar asistencia a una sesión y, cuando termina, calificarla de 1 a 5 estrellas (una vez por persona y no por quien la dictó).
+- **Chat de grupo:** mensajes entre los miembros del grupo con historial paginado y actualización periódica desde los clientes. Los mensajes del grupo y los directos pueden incluir una imagen subida a la plataforma.
+- **Asistencia y reseñas de asesorías:** confirmar asistencia antes de que empiece la sesión y registrar el ingreso real desde 10 minutos antes del inicio hasta el fin. Confirmar da 1 punto, asistir da 3 y quien confirmó pero no ingresó pierde 3. Al terminar, la sesión se califica de 1 a 5 estrellas (una vez por persona y no por quien la dictó).
 - **Grabación de la asesoría:** quien la agendó puede adjuntar el video de YouTube; el backend valida que exista con oEmbed y guarda su título.
 - **Plan de estudio del ciclo y progreso:** el plan puede incluir hasta 8 cursos con su dificultad; cada actividad del plan se puede marcar como hecha y el avance se guarda.
 - **Logros y ranking:** puntos por aportar a la comunidad, siete insignias y ranking semanal e histórico.
-- **Reportes y moderación:** cualquier usuario reporta materiales o usuarios; ADMIN/MANAGER revisan la bandeja y el ADMIN puede vetar o eliminar el material reportado.
+- **Reportes y moderación:** cualquier usuario reporta materiales o usuarios; ADMIN/MANAGER revisan la bandeja, suspenden al usuario o eliminan el material reportado.
 - **Notificaciones:** cada usuario recibe avisos cuando alguien se une a uno de sus grupos, comparte material o agenda una asesoría, cuando desbloquea una insignia y cuando le escriben por mensaje directo. El ADMIN puede enviar avisos a toda la comunidad o a una persona.
+- **Gestión de grupos:** el creador edita el nombre y la descripción, quita integrantes o elimina el grupo (con su material, sesiones y chat); los demás miembros pueden salir del grupo.
+- **Gestión de materiales:** quien subió un material (o el ADMIN) puede editarlo o eliminarlo.
+- **Subida de archivos:** además de pegar un enlace, se puede subir el archivo (PDF, Office, texto o imagen, hasta 10 MB; videos MP4, WebM o MOV, hasta 50 MB); el backend lo guarda y devuelve una URL pública.
 - **Mensajes directos:** conversaciones uno a uno entre usuarios, con contador de no leídos y búsqueda de personas por nombre de usuario.
+- **Perfil público y seguidores:** cada usuario tiene un perfil con puntos, ranking, insignias ganadas y materiales públicos; se puede seguir a otras personas y recibir un aviso cuando comparten material.
+- **Calendario personal:** las asesorías de todos los grupos del usuario en un rango de fechas.
+- **Chat en tiempo real:** WebSocket en `/ws?token=<access token>` que envía al instante los mensajes nuevos, editados o eliminados y el aviso de «escribiendo…». Los mensajes se pueden responder (cita), editar y eliminar.
+- **Foro por curso:** preguntas con búsqueda y filtros, respuestas, votos (útil / no útil) y mejor respuesta elegida por quien preguntó.
+- **Apelaciones:** un usuario suspendido apela con su usuario y contraseña; ADMIN/MANAGER aceptan (levanta la suspensión) o rechazan, y se avisa por correo.
+- **Verificación de correo:** al registrarse llega un código de 6 dígitos; hasta verificarlo la cuenta es de solo lectura (403 `EMAIL_NOT_VERIFIED`). Las cuentas creadas antes de esta función se consideran verificadas.
+- **Límite de intentos de inicio de sesión:** tras 5 contraseñas incorrectas la cuenta se bloquea 15 minutos (429 `TOO_MANY_ATTEMPTS`).
+- **Notificaciones push:** cada notificación también se envía al celular por Expo Push si el usuario registró su dispositivo.
 - **Mensajes sin leer del chat de grupo:** cada grupo informa cuántos mensajes nuevos hay desde la última vez que el usuario abrió el chat.
+- **Comunidad dentro de los grupos:** canales de texto (`#general` se crea solo), moderadores del grupo nombrados por el creador, menciones con `@usuario` que generan notificación, reacciones con emoji, mensajes fijados, hilos de respuesta, búsqueda en el historial, archivos de cualquier tipo permitido (PDF, Word, PowerPoint, Excel, texto) además de imágenes, encuestas, stickers (paquete animado de EduQuest y colección personal de hasta 30, que admite GIF animados), silenciar un grupo, miembros en línea y una sala de voz fija por grupo (Jitsi Meet). Los mensajes directos también aceptan archivos y stickers.
+- **Lectura por canal:** cada canal informa cuántos mensajes y cuántas menciones `@usuario` tienes sin leer; las notificaciones de mención y de respuesta llevan al mensaje exacto (`?message=`) y el historial se puede cargar alrededor de un mensaje (`around`).
+- **Moderación de canales:** canales de anuncios de solo lectura, modo lento de 0 a 3600 segundos y una lista de hasta 50 palabras prohibidas por grupo (se comparan sin tildes ni mayúsculas); los moderadores y el creador quedan exentos de las dos primeras reglas.
+- **Mensajes guardados, fijados y estado:** guardar hasta 200 mensajes, fijar hasta 15 chats arriba y un estado personal (disponible, ocupado, ausente o invisible, con emoji y texto); quien está invisible no aparece en línea.
+- **Chats grupales fuera de un grupo:** salas de 3 a 10 personas con mensajes, respuestas, adjuntos, lectura y notificación propia; la sala se elimina cuando sale la última persona.
+- **Presencia en voz y sala de estudio:** quién entró a la sala de voz del grupo y un Pomodoro compartido (enfoque y descanso) que todos ven sincronizado con la hora del servidor; ambos se envían en tiempo real.
+- **IA para estudiar:** resumen de lo que te perdiste en un canal y quiz o flashcards generados con Gemini a partir del PDF, texto o imagen de un material (se guardan en caché; si la IA falla se devuelve una versión básica).
+- **Búsqueda global y calendario exportable:** un solo endpoint busca materiales, grupos, preguntas del foro y personas; el calendario personal se descarga como `.ics` para importarlo en Google Calendar.
 
 ### Tecnologías Utilizadas
 
@@ -126,6 +146,10 @@ User ──< Report
 - **SessionAttendance:** confirmación de asistencia de un usuario a una sesión (única por sesión y usuario).
 - **SessionReview:** calificación de 1 a 5 de una asesoría terminada (única por sesión y usuario).
 - **GroupMessage:** mensaje del chat de un grupo, con autor y fecha.
+- **ChannelRead:** último mensaje leído por usuario y canal (para no leídos y menciones).
+- **SavedMessage / PinnedChat:** mensajes guardados y chats fijados de cada usuario.
+- **ChatRoom / RoomMessage / RoomVisit:** chats grupales fuera de un grupo, sus mensajes y la última lectura de cada integrante.
+- **StudySet:** quiz o flashcards generados para un documento (caché por tipo).
 - **Report:** reporte de un material o de un usuario, con motivo, estado (`OPEN`, `RESOLVED`, `DISMISSED`) y quién lo cerró.
 
 Las relaciones usan `FetchType.LAZY` para las asociaciones de colección y `FetchType.EAGER` únicamente para los roles del usuario (cargados en cada autenticación). La colección dueña `Document.tags` usa `cascade = {PERSIST, MERGE}`: el cascade permite persistir y actualizar en cascada las etiquetas al crear o editar el agregado, mientras que los borrados y las asociaciones que referencian entidades ya existentes (roles y miembros de grupos) se gestionan explícitamente en el servicio.
@@ -213,7 +237,7 @@ La asincronía está configurada con `@EnableAsync` y un `ThreadPoolTaskExecutor
 
 ## Pruebas y Cobertura
 
-La suite de pruebas unitarias e integración alcanza un **~98% de cobertura (instrucciones)**, muy por encima del umbral mínimo de **80%** que exige la fase `verify`:
+La suite de pruebas unitarias e integración alcanza un **~96% de cobertura (instrucciones)** con 471 pruebas, muy por encima del umbral mínimo de **80%** que exige la fase `verify`:
 
 - **Unitarias** (Mockito + AssertJ): servicios (`Auth`, `Document`, `Group`, `Review`, `StudySession`, `StudyPlan`, `Admin`, `Gemini`, `Email`), seguridad (`JwtService`, `JwtAuthorizationFilter`, `UserDetailsServiceImpl`, `UserPrincipal`), eventos asíncronos, `RoleInitializer` y `GlobalExceptionHandler`.
 - **Controladores** (8): verificación de respuestas HTTP y delegación al servicio (incluyendo autenticación vía `Authentication`/`UserPrincipal`).
@@ -242,7 +266,9 @@ Ejecutar con: `./mvnw verify`
 - `GET /api/v1/users/{id}/avatar` — imagen de perfil (pública, con caché de 7 días).
 - `GET /api/v1/admin/users?page=0&size=10` y `GET /api/v1/admin/users/{id}` — ADMIN/MANAGER (listado paginado).
 - `PATCH /api/v1/admin/users/{id}/role?role=ROLE_MANAGER` — solo ADMIN.
-- `PATCH /api/v1/admin/users/{id}/ban` con `{ "reason": "..." }` y `PATCH /api/v1/admin/users/{id}/unban` — solo ADMIN. Veta a un usuario que incumplió las normas (no se puede vetar a sí mismo ni a otro ADMIN). Un usuario vetado recibe **403** con `code: "USER_BANNED"`, `banReason` y `bannedAt` al iniciar sesión, al registrarse con el mismo correo o usuario, al renovar el token y en cualquier petición con un token anterior.
+- `POST /api/v1/admin/users/{id}/warning` con `{ "message": "..." }` — ADMIN/MANAGER. Envía una advertencia que llega como notificación.
+- `GET /api/v1/admin/stats` — ADMIN/MANAGER. Usuarios, nuevos de la semana, suspendidos, materiales, grupos, asesorías de la semana y reportes abiertos.
+- `PATCH /api/v1/admin/users/{id}/ban` con `{ "reason": "...", "days": 3 }` y `PATCH /api/v1/admin/users/{id}/unban` — ADMIN/MANAGER. Sin `days` el veto es permanente (solo ADMIN); el MANAGER solo suspende estudiantes hasta 7 días. No se puede vetar a sí mismo ni a otro ADMIN. Un usuario vetado recibe **403** con `code: "USER_BANNED"`, `banReason`, `bannedAt` y `bannedUntil` al iniciar sesión, al registrarse con el mismo correo o usuario, al renovar el token y en cualquier petición con un token anterior.
 - `GET /api/v1/documents?page=0&size=10&search=&tag=&course=&university=&sort=recent` (paginado; `sort` admite `recent`, `oldest` o `title`), `POST /api/v1/documents` — listar / crear documentos (con `course` y `university` opcionales).
 - `GET /api/v1/documents/saved`, `GET /api/v1/documents/saved/ids`, `POST|DELETE /api/v1/documents/{documentId}/saved` — materiales guardados.
 - `POST /api/v1/groups`, `GET /api/v1/groups?page=0&size=10`, `GET /api/v1/groups/{groupId}` — grupos (listado paginado y detalle). Al crear se envía `visibility` (`PUBLIC` por defecto o `PRIVATE`); los privados exigen `password` (4-50 caracteres, se guarda con BCrypt). Cada grupo recibe un código único de 6 caracteres. El listado muestra los públicos y los privados a los que ya perteneces; un privado no es visible por id para quien no es miembro.
@@ -253,12 +279,17 @@ Ejecutar con: `./mvnw verify`
 - `POST /api/v1/groups/{groupId}/invite?regenerate=false` — solo el creador. Devuelve `{ code, token, expiresAt }`: un enlace de invitación que vale 7 días y deja entrar sin contraseña. Con `regenerate=true` crea uno nuevo e invalida el anterior.
 - `PUT /api/v1/groups/{groupId}/password` con `{ "password": "..." }` — solo el creador de un grupo privado. Como la contraseña se guarda con BCrypt no se puede consultar; si el creador la olvida, pone una nueva.
 - `POST /api/v1/groups/{groupId}/documents` — subir un documento al grupo. **Solo si el usuario es miembro** de ese grupo (403 en caso contrario).
-- `POST|GET /api/v1/groups/{groupId}/sessions` — sesiones de asesoría. El enlace de la reunión (`meetingUrl`) es obligatorio y debe empezar con `http://` o `https://`. Cada sesión indica quién la agendó (`createdByUsername`) y si el usuario actual puede gestionarla (`canManage`).
+- `POST|GET /api/v1/groups/{groupId}/sessions` — sesiones de asesoría. El enlace de la reunión (`meetingUrl`) es obligatorio y debe empezar con `http://` o `https://`; `endsAt` es opcional (por defecto una hora después del inicio). La respuesta incluye `started`, `checkInOpen`, `checkedIn`, `attendeeCount` (confirmados) y `checkedInCount` (asistieron). Cada sesión indica quién la agendó (`createdByUsername`) y si el usuario actual puede gestionarla (`canManage`).
 - `PUT|DELETE /api/v1/groups/{groupId}/sessions/{sessionId}` — editar (título, descripción, fecha o enlace) o eliminar una sesión. Solo quien la agendó o el creador del grupo; 403 en otro caso.
-- `POST|DELETE /api/v1/groups/{groupId}/sessions/{sessionId}/attendance` — confirmar o cancelar asistencia (400 si la sesión ya terminó).
+- `POST|DELETE /api/v1/groups/{groupId}/sessions/{sessionId}/attendance` — confirmar o cancelar asistencia (400 si la sesión ya empezó).
+- `POST /api/v1/groups/{groupId}/sessions/{sessionId}/check-in` — registra que el usuario ingresó a la reunión (400 fuera del horario).
 - `GET|POST /api/v1/groups/{groupId}/sessions/{sessionId}/reviews` — reseñas de la asesoría. Solo después de que termine, una por persona y no por quien la agendó (409 si ya calificaste).
 - `PUT /api/v1/groups/{groupId}/sessions/{sessionId}/recording` con `{ "recordingUrl": "https://youtu.be/..." }` — adjunta o quita (vacío) la grabación. Se valida con YouTube oEmbed.
-- `GET /api/v1/groups/{groupId}/messages?after=&before=` y `POST /api/v1/groups/{groupId}/messages` — chat del grupo (solo miembros). Sin parámetros devuelve los últimos 50; `after` trae los nuevos y `before` el historial.
+- `GET /api/v1/groups/{groupId}/messages?after=&before=` y `POST /api/v1/groups/{groupId}/messages` — chat del grupo (solo miembros). Sin parámetros devuelve los últimos 50; `after` trae los nuevos y `before` el historial. El cuerpo acepta `content` y/o `imageUrl` (URL de `/api/v1/files` con imagen PNG, JPG o WEBP).
+- `PUT /api/v1/groups/{groupId}`, `DELETE /api/v1/groups/{groupId}`, `POST /api/v1/groups/{groupId}/leave` y `DELETE /api/v1/groups/{groupId}/members/{memberId}` — editar, eliminar o salir de un grupo y quitar integrantes.
+- `PUT /api/v1/documents/{documentId}` y `DELETE /api/v1/documents/{documentId}` — editar o eliminar tu material.
+- `POST /api/v1/files` (multipart, campo `file`) y `GET /api/v1/files/{id}/{nombre}?download=` — subir un archivo y descargarlo (público).
+- `DELETE /api/v1/study-plans/{planId}` — eliminar un plan de estudio.
 - `POST /api/v1/groups/{groupId}/messages/seen` — marca el chat del grupo como leído; `GET /api/v1/groups/mine` incluye `unreadMessages`.
 - `GET /api/v1/notifications?page=0&size=15`, `GET /api/v1/notifications/unread-count`, `PATCH /api/v1/notifications/{id}/read` y `PATCH /api/v1/notifications/read-all` — campana de notificaciones.
 - `GET /api/v1/conversations`, `GET /api/v1/conversations/unread-count`, `GET /api/v1/conversations/contacts?search=` y `GET /api/v1/conversations/contacts/{userId}` — bandeja de mensajes directos y búsqueda de personas.
@@ -266,10 +297,32 @@ Ejecutar con: `./mvnw verify`
 - `POST /api/v1/admin/notifications` con `{ "title": "...", "message": "...", "username": "opcional" }` — aviso del ADMIN a todos o a un usuario.
 - `POST /api/v1/study-plans/generate` — plan de estudio personalizado: `courseName` y `difficulty` para un curso, o `courses` (lista de `{ name, difficulty }`, hasta 8) para todo el ciclo.
 - `GET /api/v1/study-plans` y `PUT /api/v1/study-plans/{planId}/progress` con `{ "completedSteps": [0, 2] }` — historial con `totalSteps` y `completedSteps`, y guardado del avance.
+- `GET /api/v1/users/{id}/profile`, `GET /api/v1/users/{id}/documents`, `POST|DELETE /api/v1/users/{id}/follow`, `GET /api/v1/users/me/following` — perfil público y seguidores.
+- `GET /api/v1/sessions/mine?from=2026-11-01&to=2026-12-01` — calendario con las asesorías de mis grupos (máximo 62 días).
+- `PUT|DELETE /api/v1/groups/{groupId}/messages/{messageId}` y `PUT|DELETE /api/v1/conversations/{userId}/messages/{messageId}` — editar o eliminar mensajes; al enviar se puede indicar `replyToId`.
+- `GET|POST /api/v1/groups/{groupId}/channels`, `PUT|DELETE /api/v1/groups/{groupId}/channels/{channelId}` — canales (crear, editar y borrar: creador o moderador).
+- `GET /api/v1/groups/{groupId}/messages?channelId=&after=&before=`, `GET …/messages/search?q=&channelId=`, `GET …/messages/pins?channelId=`, `GET …/messages/{messageId}/thread`, `POST …/messages/{messageId}/reactions` con `{ "emoji": "👍" }`, `PUT …/messages/{messageId}/pin?pinned=true` — chat por canal, búsqueda, fijados, hilos y reacciones. Al enviar se puede indicar `channelId`, `threadRootId`, `fileUrl`, `fileName` y `sticker`.
+- `POST /api/v1/groups/{groupId}/polls` y `POST /api/v1/groups/{groupId}/polls/{pollId}/vote` con `{ "optionId": 3 }` (o `null` para retirar el voto) — encuestas.
+- `PUT /api/v1/groups/{groupId}/members/{memberId}/moderator?moderator=true`, `PUT /api/v1/groups/{groupId}/mute?muted=true`, `GET /api/v1/groups/{groupId}/voice-room`, `GET /api/v1/groups/{groupId}/online` — moderadores, silenciar, sala de voz y presencia.
+- `GET|POST /api/v1/users/me/stickers`, `DELETE /api/v1/users/me/stickers/{id}` — stickers personales.
+- `GET|POST /api/v1/forum/questions`, `GET|DELETE /api/v1/forum/questions/{id}`, `POST /api/v1/forum/questions/{id}/answers`, `POST /api/v1/forum/questions/{id}/answers/{answerId}/accept`, `POST /api/v1/forum/answers/{id}/vote`, `DELETE /api/v1/forum/answers/{id}` — foro.
+- `POST /api/v1/auth/appeals` (público), `GET /api/v1/admin/appeals?status=PENDING`, `GET /api/v1/admin/appeals/pending-count`, `PATCH /api/v1/admin/appeals/{id}` — apelaciones.
+- `POST /api/v1/users/me/verify-email` con `{ "code": "123456" }` y `POST /api/v1/users/me/verify-email/resend` — verificación de correo.
+- `POST|DELETE /api/v1/users/me/push-tokens` con `{ "token": "ExponentPushToken[...]" }` — registrar el celular para push.
+- `POST /api/v1/groups/{groupId}/channels/{channelId}/read`, `GET|PUT /api/v1/groups/{groupId}/moderation` con `{ "bannedWords": [...] }` — no leídos por canal y palabras prohibidas.
+- `GET /api/v1/groups/{groupId}/voice`, `POST …/voice/join`, `POST …/voice/leave` — quién está en la sala de voz.
+- `GET /api/v1/groups/{groupId}/study-room`, `POST …/study-room/start` con `{ "focusMinutes": 25, "breakMinutes": 5 }`, `POST …/study-room/join|leave|stop` — sala de estudio compartida.
+- `GET /api/v1/groups/{groupId}/messages/summary?channelId=` — resumen con IA de lo último del canal; `GET …/messages?channelId=&around=` — historial alrededor de un mensaje.
+- `PUT /api/v1/groups/{groupId}/messages/{messageId}/saved?saved=true` y `GET /api/v1/users/me/saved-messages` — mensajes guardados.
+- `PUT /api/v1/users/me/status`, `GET /api/v1/users/statuses?ids=1,2`, `GET|PUT /api/v1/users/me/pinned-chats` — estado personalizado y chats fijados.
+- `GET|POST /api/v1/rooms`, `GET|PATCH /api/v1/rooms/{roomId}`, `POST …/leave`, `GET|POST …/messages`, `PUT|DELETE …/messages/{messageId}`, `POST …/read` — chats grupales.
+- `POST /api/v1/documents/{documentId}/study-set?type=QUIZ|FLASHCARDS&refresh=false` — quiz o flashcards con IA.
+- `GET /api/v1/search?q=` — búsqueda global; `GET /api/v1/sessions/mine/calendar.ics` — exportar el calendario.
 - `GET /api/v1/gamification/me` y `GET /api/v1/gamification/leaderboard?period=week|all` — puntos, insignias y ranking.
 - `POST /api/v1/reports` con `{ "targetType": "DOCUMENT|USER", "targetId": 1, "reason": "..." }` — reportar contenido.
 - `GET /api/v1/admin/reports?status=OPEN`, `GET /api/v1/admin/reports/open-count`, `PATCH /api/v1/admin/reports/{id}` con `{ "status": "RESOLVED|DISMISSED" }` — bandeja de moderación (ADMIN/MANAGER).
-- `DELETE /api/v1/admin/documents/{documentId}` — eliminar un material reportado junto con sus reseñas (solo ADMIN).
+- `DELETE /api/v1/admin/documents/{documentId}` — eliminar un material reportado junto con sus reseñas (ADMIN/MANAGER).
+- `PATCH /api/v1/admin/documents/{documentId}/featured?featured=true` (ADMIN/MANAGER) y `GET /api/v1/documents/featured` — materiales destacados de la biblioteca pública.
 - `POST /api/v1/reviews`, `GET /api/v1/reviews/{id}`, `DELETE /api/v1/reviews/{id}` y `GET /api/v1/documents/{documentId}/reviews?page=0&size=10` — reseñas (listado paginado).
 
 La colección completa con ejemplos está en el archivo `postman_collection.json` en la raíz del repositorio.
@@ -282,6 +335,16 @@ La API incluye **Swagger UI / OpenAPI 3.1** (springdoc-openapi v3), disponible e
 - `http://localhost:8080/v3/api-docs` — spec OpenAPI en JSON.
 
 Para probar los endpoints protegidos, primero genera un token en `POST /api/v1/auth/login` y usa el botón **Authorize** de Swagger pegando el `accessToken` (se envía como `Authorization: Bearer <token>`). El esquema de seguridad se define en `config/OpenAPIConfig.java` y los controladores están documentados con `@Tag`/`@Operation`.
+
+## Despliegue en AWS (EC2 con HTTPS)
+
+La carpeta `deploy/` levanta en el EC2 la base de datos, la imagen publicada en Docker Hub y [Caddy](https://caddyserver.com) como proxy con certificado HTTPS automático (Let's Encrypt), necesario para que la web en Vercel pueda llamar a la API y abrir el WebSocket (`wss://`).
+
+1. En el *Security Group* de la instancia, abre los puertos **80** y **443** (el 8080 ya no necesita estar público).
+2. Apunta un dominio a la IP elástica de la instancia. Sin dominio propio sirve uno gratuito de DuckDNS o `<ip-con-guiones>.sslip.io` (por ejemplo `3-90-12-34.sslip.io`).
+3. En el EC2: `cd deploy && cp .env.example .env`, completa los valores (`API_DOMAIN` con el dominio, `CORS_ALLOWED_ORIGINS=https://<app>.vercel.app` y `FRONTEND_URL` con la misma dirección) y ejecuta `docker compose -f docker-compose.prod.yml up -d`.
+4. En Vercel, define `VITE_API_BASE_URL=https://<API_DOMAIN>/api/v1` y vuelve a desplegar. En la app móvil, `EXPO_PUBLIC_API_URL` de `eas.json` apunta a la misma dirección.
+5. Para actualizar tras un push a `main`: `docker compose -f docker-compose.prod.yml pull backend && docker compose -f docker-compose.prod.yml up -d backend`.
 
 ## Evidencias del Deploy
 
@@ -342,7 +405,6 @@ El equipo consolidó patrones aprendidos en el curso: arquitectura Controller→
 
 ### Trabajo Futuro
 
-- Pasar el chat de consultas periódicas a WebSocket (STOMP) para recibir los mensajes al instante.
-- Upload de archivos directo a S3/Cloudinary, incluyendo videos.
-- Integración con Google Meet/Zoom para generar enlaces de asesoría automáticamente.
+- Upload de archivos directo a S3/Cloudinary, para no guardar videos pesados en la base de datos.
+- Sala de voz propia (WebRTC) en lugar de abrir Jitsi Meet en otra pestaña.
 
