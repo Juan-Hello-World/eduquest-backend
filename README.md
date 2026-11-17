@@ -2,7 +2,7 @@
 
 **Proyecto:** EduQuest — Plataforma educativa de materiales, grupos de estudio y planes inteligentes
 **Curso:** CS 2031 Desarrollo Basado en Plataforma
-**Entrega:** Semana 7 — Backend completo
+**Entrega:** Proyecto 2 — versión final
 **Integrantes:**
 
 | Nombre | Código |
@@ -12,7 +12,15 @@
 | Omar Alonzo Guzmán Harvey | 202510519 |
 | Edson Yenen Falcon Jimenez | 202510492 |
 
-**Deployment:** desplegado — evidencias en la sección [Evidencias del Deploy](#evidencias-del-deploy).
+**Deployment:**
+
+| Servicio | URL |
+|---|---|
+| API (EC2 + RDS + S3) | https://3-222-104-57.sslip.io/api/v1 |
+| Swagger UI | https://3-222-104-57.sslip.io/swagger-ui.html |
+| Web (AWS Amplify) | https://main.d2uujuj0mby859.amplifyapp.com |
+
+Detalle en [Despliegue en AWS](#despliegue-en-aws-ec2--rds--s3) y [Evidencias del Deploy](#evidencias-del-deploy).
 
 ---
 
@@ -30,10 +38,10 @@
 10. [Pruebas y Cobertura](#pruebas-y-cobertura)
 11. [Variables de Entorno](#variables-de-entorno)
 12. [Endpoints Documentados](#endpoints-documentados)
-13. [Evidencias del Deploy](#evidencias-del-deploy)
-14. [GitHub & Management](#github--management)
-15. [Conclusión](#conclusión)
-16. [Apéndices](#apéndices)
+13. [Despliegue en AWS](#despliegue-en-aws-ec2--rds--s3)
+14. [Evidencias del Deploy](#evidencias-del-deploy)
+15. [GitHub & Management](#github--management)
+16. [Conclusión](#conclusión)
 
 ---
 
@@ -69,7 +77,7 @@ Una plataforma que centralice materiales confiables, grupos privados de asesorí
 - **Biblioteca de documentos:** subir y listar materiales académicos en la biblioteca abierta.
 - **Grupos privados:** crear grupos de estudio y listar los existentes.
 - **Sesiones de asesoría:** reservar y listar sesiones de estudio dentro de un grupo privado, con enlace de reunión, hora de inicio y hora de fin (máximo 8 horas).
-- **Plan de estudio personalizado:** el usuario ingresa un curso y su dificultad percibida; el backend devuelve una metodología de estudio generada. Si el proveedor externo no está disponible (por ejemplo, sin créditos), se devuelve un plan base generado localmente para no interrumpir la experiencia.
+- **Plan de estudio personalizado:** el usuario ingresa un curso y su dificultad percibida; el backend devuelve una metodología de hasta 8 semanas generada con IA. Si el proveedor externo no está disponible (por ejemplo, sin créditos), se devuelve un plan base generado localmente para no interrumpir la experiencia.
 - **Reseñas:** calificar y comentar documentos (1–5 estrellas) con validación de una reseña por usuario y por documento.
 - **Administración de usuarios:** el rol ADMIN/MANAGER puede listar usuarios y el ADMIN puede cambiar roles.
 - **Gestor (MANAGER) como moderador:** suspende estudiantes por 1, 3 o 7 días, envía advertencias, elimina materiales reportados, marca materiales como destacados y consulta un resumen de estadísticas de la plataforma. Solo el ADMIN puede vetar de forma permanente o suspender a otros gestores.
@@ -85,12 +93,12 @@ Una plataforma que centralice materiales confiables, grupos privados de asesorí
 - **Notificaciones:** cada usuario recibe avisos cuando alguien se une a uno de sus grupos, comparte material o agenda una asesoría, cuando desbloquea una insignia y cuando le escriben por mensaje directo. El ADMIN puede enviar avisos a toda la comunidad o a una persona.
 - **Gestión de grupos:** el creador edita el nombre y la descripción, quita integrantes o elimina el grupo (con su material, sesiones y chat); los demás miembros pueden salir del grupo.
 - **Gestión de materiales:** quien subió un material (o el ADMIN) puede editarlo o eliminarlo.
-- **Subida de archivos:** además de pegar un enlace, se puede subir el archivo (PDF, Office, texto o imagen, hasta 10 MB; videos MP4, WebM o MOV, hasta 50 MB); el backend lo guarda y devuelve una URL pública.
+- **Subida de archivos:** además de pegar un enlace, se puede subir el archivo (PDF, Office, texto o imagen, hasta 10 MB; videos MP4, WebM o MOV, hasta 50 MB). En producción el archivo se guarda en un bucket S3 privado y en local en PostgreSQL; en ambos casos el cliente recibe la misma URL `/api/v1/files/{id}/{nombre}`.
 - **Mensajes directos:** conversaciones uno a uno entre usuarios, con contador de no leídos y búsqueda de personas por nombre de usuario.
 - **Perfil público y seguidores:** cada usuario tiene un perfil con puntos, ranking, insignias ganadas y materiales públicos; se puede seguir a otras personas y recibir un aviso cuando comparten material.
 - **Calendario personal:** las asesorías de todos los grupos del usuario en un rango de fechas.
 - **Chat en tiempo real:** WebSocket en `/ws?token=<access token>` que envía al instante los mensajes nuevos, editados o eliminados y el aviso de «escribiendo…». Los mensajes se pueden responder (cita), editar y eliminar.
-- **Foro por curso:** preguntas con búsqueda y filtros, respuestas, votos (útil / no útil) y mejor respuesta elegida por quien preguntó.
+- **Foro por curso:** preguntas con búsqueda y filtros, respuestas, votos (útil / no útil) y mejor respuesta elegida por quien preguntó. Las respuestas, votos y contadores se actualizan en tiempo real para todos los usuarios conectados.
 - **Apelaciones:** un usuario suspendido apela con su usuario y contraseña; ADMIN/MANAGER aceptan (levanta la suspensión) o rechazan, y se avisa por correo.
 - **Verificación de correo:** al registrarse llega un código de 6 dígitos; hasta verificarlo la cuenta es de solo lectura (403 `EMAIL_NOT_VERIFIED`). Las cuentas creadas antes de esta función se consideran verificadas.
 - **Límite de intentos de inicio de sesión:** tras 5 contraseñas incorrectas la cuenta se bloquea 15 minutos (429 `TOO_MANY_ATTEMPTS`).
@@ -102,7 +110,7 @@ Una plataforma que centralice materiales confiables, grupos privados de asesorí
 - **Mensajes guardados, fijados y estado:** guardar hasta 200 mensajes, fijar hasta 15 chats arriba y un estado personal (disponible, ocupado, ausente o invisible, con emoji y texto); quien está invisible no aparece en línea.
 - **Chats grupales fuera de un grupo:** salas de 3 a 10 personas con mensajes, respuestas, adjuntos, lectura y notificación propia; la sala se elimina cuando sale la última persona.
 - **Presencia en voz y sala de estudio:** quién entró a la sala de voz del grupo y un Pomodoro compartido (enfoque y descanso) que todos ven sincronizado con la hora del servidor; ambos se envían en tiempo real.
-- **IA para estudiar:** resumen de lo que te perdiste en un canal y quiz o flashcards generados con Gemini a partir del PDF, texto o imagen de un material (se guardan en caché; si la IA falla se devuelve una versión básica).
+- **IA para estudiar:** resumen de lo que te perdiste en un canal y quiz o flashcards generados con Gemini a partir del PDF, texto o imagen de un material (se guardan en caché; si la IA falla se devuelve una versión básica). Las fórmulas se piden con símbolos Unicode en lugar de LaTeX.
 - **Búsqueda global y calendario exportable:** un solo endpoint busca materiales, grupos, preguntas del foro y personas; el calendario personal se descarga como `.ics` para importarlo en Google Calendar.
 
 ### Tecnologías Utilizadas
@@ -113,7 +121,9 @@ Una plataforma que centralice materiales confiables, grupos privados de asesorí
 - **Lombok** para reducir código repetitivo en entidades y DTOs.
 - **Thymeleaf** para plantillas HTML de correos.
 - **API de Google Gemini (gemini-3.5-flash-lite)** para la generación de planes de estudio.
-- **Docker / Docker Compose** para la base de datos local.
+- **AWS SDK for Java v2 (S3)** para guardar los archivos y generar URLs firmadas.
+- **Docker / Docker Compose** para la base de datos local y para el despliegue (backend + Caddy).
+- **AWS:** EC2, RDS PostgreSQL, S3, CloudFormation y Amplify (web).
 
 ## Modelo de Entidades
 
@@ -173,6 +183,9 @@ Cliente (Postman / Frontend)
         │                        │                          │
         ▼                        ▼                          ▼
    PostgreSQL 18 (JPA)    Gemini gemini-3.5-flash-lite (RestTemplate)    SMTP Gmail
+
+   Archivos: ObjectStorage → Amazon S3 (producción) · PostgreSQL (local)
+   Tiempo real: WebSocket /ws ← RealtimeEvent (AFTER_COMMIT)
 ```
 
 - **Controller → Service → Repository:** los controladores solo orquestan HTTP y validan con `@Valid`; la lógica de negocio y las decisiones de autorización viven en los servicios detrás de interfaces, por lo que los controladores se mantienen delgados.
@@ -181,6 +194,8 @@ Cliente (Postman / Frontend)
 - **ProblemDetail (RFC 9457)** como formato único de error con `timestamp`, `status`, `error`, `message`, `detail` y `path`, emitido por un `GlobalExceptionHandler` central.
 - **HATEOAS considerado:** la API usa URIs REST por recurso (`/users`, `/documents`, `/reviews`) y está versionada en `/api/v1`; los enlaces hipermedia se dejan como evolución futura.
 - **Configuración por perfiles:** `test` (H2 en memoria, integración continua) y `prod` (despliegue); el perfil por defecto usa PostgreSQL local mediante `.env`. Los secretos se inyectan con variables de entorno.
+
+- **Almacenamiento intercambiable:** `ObjectStorage` define la interfaz y `S3ObjectStorage` solo se crea con `STORAGE_PROVIDER=s3`; sin ella los archivos se guardan en la base, así el proyecto corre en local sin AWS.
 
 - **Paginación:** los endpoints de listado (`/documents`, `/groups`, `/admin/users`, `/documents/{id}/reviews`) aceptan `page` y `size` y responden una envoltura `{ content, page, size, totalElements, totalPages }`.
 
@@ -225,6 +240,11 @@ El sistema publica eventos personalizados (`ApplicationEvent`) procesados de for
 4. **`OnGroupActivityEvent`:** un nuevo integrante, material o asesoría en un grupo genera una notificación para los demás miembros.
 5. **`OnDirectMessageSentEvent`:** notifica al destinatario de un mensaje directo; los mensajes seguidos del mismo remitente se agrupan en una sola notificación mientras no se lea.
 6. **`OnUserActivityEvent`:** tras aportar (material, reseña, asesoría, asistencia o avance del plan) se revisan las insignias y se notifica cada una nueva.
+7. **`OnPublicDocumentEvent`:** cuando alguien publica un material en la biblioteca abierta se avisa a sus seguidores.
+8. **`OnAccountEmailEvent`:** envía los correos de la cuenta (código de verificación y resultado de una apelación).
+9. **`OnPasswordResetRequestedEvent`:** envía el código para recuperar la contraseña.
+10. **`OnPushEvent`:** reenvía cada notificación al celular por Expo Push.
+11. **`RealtimeEvent`:** después del commit envía por WebSocket los cambios del chat, mensajes directos, salas, presencia y foro a los usuarios conectados.
 
 La asincronía está configurada con `@EnableAsync` y un `ThreadPoolTaskExecutor` con `threadNamePrefix = "EduQuestAsync-"`. Se usan transacciones (`@Transactional`) y el commit como punto de disparo para no enviar correos de operaciones que luego fallan. La comunicación por eventos desacopla publicación (`ApplicationEventPublisher`) y consumidor (`@EventListener`).
 
@@ -237,9 +257,9 @@ La asincronía está configurada con `@EnableAsync` y un `ThreadPoolTaskExecutor
 
 ## Pruebas y Cobertura
 
-La suite de pruebas unitarias e integración alcanza un **~96% de cobertura (instrucciones)** con 471 pruebas, muy por encima del umbral mínimo de **80%** que exige la fase `verify`:
+La suite de pruebas unitarias e integración alcanza un **97% de cobertura (instrucciones)** con 489 pruebas, muy por encima del umbral mínimo de **80%** que exige la fase `verify`:
 
-- **Unitarias** (Mockito + AssertJ): servicios (`Auth`, `Document`, `Group`, `Review`, `StudySession`, `StudyPlan`, `Admin`, `Gemini`, `Email`), seguridad (`JwtService`, `JwtAuthorizationFilter`, `UserDetailsServiceImpl`, `UserPrincipal`), eventos asíncronos, `RoleInitializer` y `GlobalExceptionHandler`.
+- **Unitarias** (Mockito + AssertJ): servicios (`Auth`, `Document`, `Group`, `Review`, `StudySession`, `StudyPlan`, `Admin`, `Gemini`, `Email`), seguridad (`JwtService`, `JwtAuthorizationFilter`, `UserDetailsServiceImpl`, `UserPrincipal`), almacenamiento en S3 (`S3ObjectStorage`, `S3StorageConfig`), eventos asíncronos, `RoleInitializer` y `GlobalExceptionHandler`.
 - **Controladores** (8): verificación de respuestas HTTP y delegación al servicio (incluyendo autenticación vía `Authentication`/`UserPrincipal`).
 - **Integración** (`AuthFlowIntegrationTest`, perfil `test` con H2): registro y login, perfil del usuario autenticado, protección de endpoints sin token, paginación real, subida de documentos a un grupo (403 si no eres miembro, 201 si sí) y gestión de roles (ADMIN cambia rol, MANAGER lista pero no cambia, USER no lista).
 - **Medición**: JaCoCo genera el reporte en `target/site/jacoco/index.html` y falla el build si la cobertura baja del 80%.
@@ -338,17 +358,38 @@ Para probar los endpoints protegidos, primero genera un token en `POST /api/v1/a
 
 ## Despliegue en AWS (EC2 + RDS + S3)
 
-Arquitectura: el backend corre con Docker Compose en un **EC2** detrás de [Caddy](https://caddyserver.com) (HTTPS automático con Let's Encrypt y `wss://` para el WebSocket), la base de datos está en **RDS PostgreSQL**, los archivos (materiales, imágenes, videos, fotos de grupos y de perfil) se guardan en un bucket **S3** privado y la web se publica en **AWS Amplify**. La imagen del backend la construye y publica en Docker Hub el workflow `docker-publish.yml` en cada push.
+```
+Navegador ──HTTPS──▶ AWS Amplify (web React)
+    │
+    └──HTTPS / WSS──▶ EC2 · Docker Compose
+                       ├─ Caddy (TLS de Let's Encrypt, 80/443)
+                       └─ backend Spring Boot (8080)
+                             ├─▶ RDS PostgreSQL (SSL)
+                             └─▶ S3 (archivos, con LabInstanceProfile)
+App móvil ──HTTPS / WSS──▶ mismo EC2
+```
 
-**Archivos.** Con `STORAGE_PROVIDER=s3` el backend sube cada archivo a S3 y en la base solo guarda sus datos y la clave del objeto. Las URLs que reciben la web y la app siguen siendo `https://<API_DOMAIN>/api/v1/files/{id}/{nombre}`: al pedirlas, el backend responde con una redirección a una URL firmada de S3 que dura 10 minutos, así el bucket nunca es público. En local, sin esa variable, todo sigue guardándose en PostgreSQL.
+| Pieza | Configuración |
+|---|---|
+| EC2 | Ubuntu 22.04, t3.micro con 2 GB de swap, IP elástica `3.222.104.57`, perfil `LabInstanceProfile`, *hop limit* de metadatos en 2 |
+| Dominio | `3-222-104-57.sslip.io`, que resuelve a la IP elástica; Caddy obtiene el certificado HTTPS automáticamente |
+| RDS | PostgreSQL 18 (`db.t4g.micro`), conexión con `DB_SSLMODE=require` |
+| S3 | `eduquest-media-<cuenta>-us-east-1`, creado con `deploy/cloudformation.yml` (privado, cifrado y solo HTTPS) |
+| Web | AWS Amplify con `amplify.yml`, variable `VITE_API_BASE_URL` y regla de reescritura para la SPA |
+| CORS | `CORS_ALLOWED_ORIGINS` = URL de Amplify (API, WebSocket e iframes) |
 
-1. **S3 e IAM.** En CloudFormation crea un stack con `deploy/cloudformation.yml`. El stack crea el bucket (privado, cifrado, solo HTTPS y con CORS de lectura, porque al seguir la redirección el navegador envía `Origin: null`; los objetos solo se leen con la URL firmada) y el rol `eduquest-backend-<región>` con permiso solo para subir, leer y borrar en ese bucket. Anota las salidas `BucketName` y `Region`. En AWS Academy, que no permite crear roles, usa `CreateInstanceRole=false` y en el paso 2 asigna `LabInstanceProfile`.
-2. **EC2.** Lanza una instancia Amazon Linux 2023 (t3.small recomendada) con una IP elástica y asígnale el perfil de instancia del paso 1. En *Security Group*: puertos **80** y **443** abiertos y **22** solo desde tu IP. Deja *Metadata response hop limit* en **2** para que el contenedor pueda leer las credenciales del rol.
-3. **RDS.** Crea una base PostgreSQL sin acceso público y con nombre inicial `eduquest`. Su *Security Group* debe permitir el puerto **5432** solo desde el *Security Group* del EC2. Las tablas se crean al arrancar el backend.
-4. **Dominio.** Apunta un dominio a la IP elástica del EC2 o usa `<ip-con-guiones>.sslip.io` (por ejemplo `3-85-10-20.sslip.io`), que resuelve a esa IP sin configurar nada. Amplify sirve la web por HTTPS, así que el backend también necesita HTTPS.
-5. **Arranque.** En el EC2: `git clone` del repositorio, `bash deploy/setup-ec2.sh`, vuelve a entrar por SSH y luego `cd deploy && cp .env.example .env`. Completa el `.env` (endpoint de RDS en `DB_HOST`, `S3_BUCKET`, `AWS_REGION`, `API_DOMAIN`, la URL de Amplify en `CORS_ALLOWED_ORIGINS` y `FRONTEND_URL`, y los secretos) y ejecuta `docker compose -f docker-compose.prod.yml up -d --build` (construye la imagen en el EC2; si usan la de Docker Hub, `pull` en lugar de `--build`).
-6. **CORS.** `CORS_ALLOWED_ORIGINS` se aplica a la API, al WebSocket y a las vistas previas en iframe. Debe ser la URL exacta de Amplify, sin barra final; si luego usan un dominio propio se agrega separado por comas. La app móvil no envía cabecera `Origin`, así que no necesita estar en la lista.
-En **AWS Academy (Learner Lab)** los pasos 1, 3 y 5 los hace `deploy/aws-learner-lab.sh` dentro del EC2. Se reserva una IP elástica, se lanza el EC2 con `LabInstanceProfile` y en *User data* se pone:
+**Archivos.** Con `STORAGE_PROVIDER=s3` el backend sube cada archivo a S3 y en la base solo guarda sus datos y la clave del objeto. Las URLs que reciben la web y la app siguen siendo `/api/v1/files/{id}/{nombre}`: al pedirlas, el backend responde con una redirección a una URL firmada que dura 10 minutos, así el bucket nunca es público. El bucket acepta lecturas CORS desde cualquier origen porque, al seguir la redirección, el navegador envía `Origin: null`; aun así cada objeto solo se lee con su firma. Las credenciales vienen del perfil de instancia, sin claves en el código ni en el `.env`.
+
+### Pasos
+
+1. **Bucket.** En CloudShell: `aws cloudformation deploy --stack-name eduquest-media --template-file deploy/cloudformation.yml --parameter-overrides CreateInstanceRole=false`. Con `CreateInstanceRole=true` (cuentas que permiten crear roles) también crea un rol con permiso solo sobre ese bucket.
+2. **EC2.** Asignar `LabInstanceProfile` y una IP elástica, abrir los puertos 80, 443 y 22 y poner el *hop limit* de metadatos en 2 para que el contenedor lea las credenciales del rol.
+3. **RDS.** Base PostgreSQL cuyo *Security Group* permita el puerto 5432 desde el EC2. Las tablas se crean al arrancar el backend.
+4. **Arranque.** En el EC2: `git clone` del repositorio, `bash deploy/setup-ec2.sh` (Docker, Compose, Buildx y swap), `cd deploy && cp .env.example .env`, completar el `.env` y ejecutar `docker compose -f docker-compose.prod.yml up -d --build`.
+5. **Web.** En Amplify, `VITE_API_BASE_URL=https://3-222-104-57.sslip.io/api/v1` y la regla de reescritura del README del frontend.
+6. **Actualizar** tras un push: `cd ~/eduquest && git pull && cd deploy && docker compose -f docker-compose.prod.yml up -d --build backend`.
+
+Para una cuenta nueva de AWS Academy, `deploy/aws-learner-lab.sh` automatiza los pasos 1 a 4 desde el *User data* de un EC2 nuevo: asocia la IP elástica, crea el bucket, la base en RDS y su *Security Group*, genera el `.env` y levanta el backend.
 
 ```bash
 #!/bin/bash
@@ -357,9 +398,7 @@ git clone https://github.com/Juan-Hello-World/eduquest-backend.git /opt/eduquest
 bash /opt/eduquest/deploy/aws-learner-lab.sh <url-de-amplify> <allocation-id> > /var/log/eduquest.log 2>&1
 ```
 
-El script asocia la IP, crea el bucket, la base en RDS y su *Security Group*, genera el `.env` y levanta el backend en `https://<ip-con-guiones>.sslip.io`. Las claves de correo y de Gemini se agregan después en `/opt/eduquest/deploy/.env`.
-
-7. **Actualizar** tras un push: `git pull && docker compose -f docker-compose.prod.yml up -d --build backend`.
+En el Learner Lab el EC2 se apaga al cerrar la sesión; al iniciarla de nuevo, Docker vuelve a levantar los contenedores y la API responde en la misma dirección gracias a la IP elástica.
 
 ## Evidencias del Deploy
 
@@ -406,13 +445,13 @@ Ejecución de la colección (`postman_collection.json`) contra la URL pública d
 
 ## GitHub & Management
 
-El código vive en un repositorio central en GitHub con `main` como rama de integración y **GitHub Actions** como CI: el flujo compila, ejecuta los tests y valida la cobertura mínima del 80% con JaCoCo (`./mvnw verify`) en cada push. Los avances se registran en commits organizados por misión (seguridad, eventos, deployment) y, para la siguiente fase, la gestión del backlog se hará con GitHub Issues.
+El código vive en un repositorio central en GitHub con `master` como rama de integración y **GitHub Actions**: `ci.yml` compila, ejecuta los tests y valida la cobertura mínima del 80% con JaCoCo (`./mvnw verify`) en cada push, y `docker-publish.yml` publica la imagen en Docker Hub. Los avances se registran en commits organizados por misión (seguridad, eventos, deployment) y, para la siguiente fase, la gestión del backlog se hará con GitHub Issues.
 
 ## Conclusión
 
 ### Logros del Proyecto
 
-EduQuest entrega un backend completo en capas: modelo de 14 entidades con relaciones correctas, 38 DTOs segregados, autenticación JWT con refresh tokens y roles, manejo global de errores en formato ProblemDetail, tres eventos asíncronos con correos HTML, generador de planes de estudio basado en Google Gemini y documentación interactiva con Swagger, todo desplegable en la nube con un repositorio limpio y documentado.
+EduQuest entrega un backend completo en capas: 35 entidades JPA, 95 DTOs de entrada y salida, autenticación JWT con refresh tokens y roles, manejo global de errores en formato ProblemDetail, eventos asíncronos con correos HTML y notificaciones push, chat y foro en tiempo real por WebSocket, IA con Google Gemini (planes, resúmenes, quiz y flashcards) y documentación interactiva con Swagger. Está desplegado en AWS con EC2, RDS, S3 y Amplify.
 
 ### Aprendizajes Clave
 
@@ -420,6 +459,7 @@ El equipo consolidó patrones aprendidos en el curso: arquitectura Controller→
 
 ### Trabajo Futuro
 
-- Upload de archivos directo a S3/Cloudinary, para no guardar videos pesados en la base de datos.
 - Sala de voz propia (WebRTC) en lugar de abrir Jitsi Meet en otra pestaña.
+- Dominio propio para la API y la web en lugar de `sslip.io` y el dominio de Amplify.
+- Subida directa del navegador a S3 con URLs firmadas, para que los videos no pasen por el EC2.
 
