@@ -22,6 +22,8 @@ import com.eduquest.api.security.UserPrincipal;
 import com.eduquest.api.service.DocumentService;
 import com.eduquest.api.service.GamificationService;
 import com.eduquest.api.service.UserService;
+import com.eduquest.api.storage.ObjectStorage;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -32,6 +34,7 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -47,19 +50,22 @@ public class UserServiceImpl implements UserService {
     private final PasswordEncoder passwordEncoder;
     private final GamificationService gamificationService;
     private final DocumentService documentService;
+    private final ObjectProvider<ObjectStorage> objectStorage;
 
     public UserServiceImpl(UserRepository userRepository,
                            UserAvatarRepository userAvatarRepository,
                            JwtService jwtService,
                            PasswordEncoder passwordEncoder,
                            GamificationService gamificationService,
-                           DocumentService documentService) {
+                           DocumentService documentService,
+                           ObjectProvider<ObjectStorage> objectStorage) {
         this.userRepository = userRepository;
         this.userAvatarRepository = userAvatarRepository;
         this.jwtService = jwtService;
         this.passwordEncoder = passwordEncoder;
         this.gamificationService = gamificationService;
         this.documentService = documentService;
+        this.objectStorage = objectStorage;
     }
 
     @Override
@@ -185,7 +191,19 @@ public class UserServiceImpl implements UserService {
             created.setUser(user);
             return created;
         });
-        avatar.setData(readBytes(file));
+        byte[] data = readBytes(file);
+        ObjectStorage storage = objectStorage.getIfAvailable();
+        if (storage != null) {
+            String key = "avatars/" + user.getId() + "/" + UUID.randomUUID();
+            storage.put(key, data, contentType);
+            if (avatar.getStorageKey() != null) {
+                storage.delete(avatar.getStorageKey());
+            }
+            avatar.setStorageKey(key);
+            avatar.setData(null);
+        } else {
+            avatar.setData(data);
+        }
         avatar.setContentType(contentType);
         avatar.setUpdatedAt(LocalDateTime.now());
         userAvatarRepository.save(avatar);
@@ -197,9 +215,13 @@ public class UserServiceImpl implements UserService {
     @Override
     public void deleteAvatar(String username) {
         User user = findUser(username);
-        if (userAvatarRepository.existsById(user.getId())) {
-            userAvatarRepository.deleteById(user.getId());
-        }
+        userAvatarRepository.findById(user.getId()).ifPresent(avatar -> {
+            ObjectStorage storage = objectStorage.getIfAvailable();
+            if (storage != null && avatar.getStorageKey() != null) {
+                storage.delete(avatar.getStorageKey());
+            }
+            userAvatarRepository.delete(avatar);
+        });
         user.setAvatarVersion(null);
         userRepository.save(user);
     }
@@ -209,7 +231,12 @@ public class UserServiceImpl implements UserService {
     public AvatarImageDTO getAvatar(Long userId) {
         UserAvatar avatar = userAvatarRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Este usuario no tiene foto de perfil"));
-        return new AvatarImageDTO(avatar.getData(), avatar.getContentType());
+        ObjectStorage storage = objectStorage.getIfAvailable();
+        if (storage != null && avatar.getStorageKey() != null) {
+            return new AvatarImageDTO(null, avatar.getContentType(),
+                    storage.temporaryUrl(avatar.getStorageKey(), "avatar", false));
+        }
+        return new AvatarImageDTO(avatar.getData(), avatar.getContentType(), null);
     }
 
     private User findUser(String username) {

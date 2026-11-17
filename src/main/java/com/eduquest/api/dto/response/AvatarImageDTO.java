@@ -1,4 +1,4 @@
 package com.eduquest.api.dto.response;
 
-public record AvatarImageDTO(byte[] data, String contentType) {
+public record AvatarImageDTO(byte[] data, String contentType, String redirectUrl) {
 }

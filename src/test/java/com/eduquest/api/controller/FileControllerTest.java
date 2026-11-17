@@ -77,4 +77,17 @@ class FileControllerTest {
         assertThat(inline.getBody().getContentAsByteArray()).containsExactly(1);
         assertThat(inline.getHeaders().getFirst(HttpHeaders.ACCEPT_RANGES)).isEqualTo("bytes");
     }
+
+    @Test
+    void download_storedInS3_redirectsToTemporaryUrl() {
+        when(fileStorageService.temporaryUrl("abc", true))
+                .thenReturn(java.util.Optional.of("https://bucket.s3.amazonaws.com/files/abc/apuntes.pdf?X-Amz-Signature=1"));
+
+        ResponseEntity<org.springframework.core.io.Resource> response = fileController.download("abc", true);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FOUND);
+        assertThat(response.getHeaders().getLocation()).hasToString(
+                "https://bucket.s3.amazonaws.com/files/abc/apuntes.pdf?X-Amz-Signature=1");
+        assertThat(response.getHeaders().getCacheControl()).contains("private");
+    }
 }

@@ -25,7 +25,9 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 @RestController
@@ -60,6 +62,13 @@ public class FileController {
             description = "Público. Con download=true el navegador lo descarga en lugar de mostrarlo. Admite Range para adelantar videos.")
     public ResponseEntity<Resource> download(@PathVariable String fileId,
                                            @RequestParam(defaultValue = "false") boolean download) {
+        Optional<String> temporaryUrl = fileStorageService.temporaryUrl(fileId, download);
+        if (temporaryUrl.isPresent()) {
+            return ResponseEntity.status(HttpStatus.FOUND)
+                    .location(URI.create(temporaryUrl.get()))
+                    .cacheControl(CacheControl.maxAge(5, TimeUnit.MINUTES).cachePrivate())
+                    .build();
+        }
         StoredFileDTO file = fileStorageService.load(fileId);
         ContentDisposition disposition = (download ? ContentDisposition.attachment() : ContentDisposition.inline())
                 .filename(file.fileName(), StandardCharsets.UTF_8)

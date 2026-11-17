@@ -18,12 +18,14 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.CacheControl;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.net.URI;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -112,6 +114,12 @@ public class UserController {
     @Operation(summary = "Obtener foto de perfil", description = "Público. 404 si el usuario no tiene foto.")
     public ResponseEntity<byte[]> getAvatar(@PathVariable Long userId) {
         AvatarImageDTO image = userService.getAvatar(userId);
+        if (image.redirectUrl() != null) {
+            return ResponseEntity.status(HttpStatus.FOUND)
+                    .location(URI.create(image.redirectUrl()))
+                    .cacheControl(CacheControl.maxAge(5, TimeUnit.MINUTES).cachePrivate())
+                    .build();
+        }
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(image.contentType()))
                 .cacheControl(CacheControl.maxAge(7, TimeUnit.DAYS).cachePublic())

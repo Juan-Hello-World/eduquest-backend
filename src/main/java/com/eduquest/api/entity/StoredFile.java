@@ -27,8 +27,11 @@ public class StoredFile {
     private String id;
 
     @JdbcTypeCode(SqlTypes.VARBINARY)
-    @Column(nullable = false, columnDefinition = "bytea")
+    @Column(columnDefinition = "bytea")
     private byte[] data;
+
+    @Column(name = "storage_key", length = 200)
+    private String storageKey;
 
     @Column(nullable = false, length = 120)
     private String contentType;

@@ -11,4 +11,5 @@ public interface FileStorageService {
     StoredFileDTO load(String fileId);
     void deleteByUrl(String fileUrl);
     Optional<StoredFileDTO> loadByUrl(String fileUrl);
+    Optional<String> temporaryUrl(String fileId, boolean download);
 }

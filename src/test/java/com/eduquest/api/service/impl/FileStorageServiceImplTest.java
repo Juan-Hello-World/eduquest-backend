@@ -7,6 +7,7 @@ import com.eduquest.api.exception.BadRequestException;
 import com.eduquest.api.exception.ResourceNotFoundException;
 import com.eduquest.api.repository.StoredFileRepository;
 import com.eduquest.api.repository.UserRepository;
+import com.eduquest.api.storage.ObjectStorage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -15,6 +16,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -24,6 +26,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -35,6 +38,8 @@ class FileStorageServiceImplTest {
 
     @Mock StoredFileRepository fileRepository;
     @Mock UserRepository userRepository;
+    @Mock ObjectProvider<ObjectStorage> objectStorage;
+    @Mock ObjectStorage storage;
 
     @InjectMocks FileStorageServiceImpl fileStorageService;
 
@@ -147,14 +152,70 @@ class FileStorageServiceImplTest {
     @Test
     void deleteByUrl_onlyDeletesOwnStoredFiles() {
         String id = "0f8c6a43-6a1e-4c55-9a6f-9a7d5a1b2c3d";
-        when(fileRepository.existsById(id)).thenReturn(true);
+        StoredFile stored = new StoredFile();
+        stored.setId(id);
+        when(fileRepository.findById(id)).thenReturn(Optional.of(stored));
 
         fileStorageService.deleteByUrl("http://localhost:8080/api/v1/files/" + id + "/apuntes.pdf");
         fileStorageService.deleteByUrl("https://drive.google.com/file/d/123/view");
         fileStorageService.deleteByUrl(null);
 
-        verify(fileRepository).deleteById(id);
-        verify(fileRepository, never()).deleteById("123");
+        verify(fileRepository).delete(stored);
+        verify(fileRepository, never()).findById("123");
+    }
+
+    @Test
+    void store_withObjectStorage_uploadsBytesAndKeepsOnlyTheKey() {
+        when(objectStorage.getIfAvailable()).thenReturn(storage);
+        MockMultipartFile file = new MockMultipartFile("file", "resumen.pdf", "application/pdf", new byte[]{4, 5});
+
+        StoredFile stored = fileStorageService.store(file, "alice");
+
+        assertThat(stored.getData()).isNull();
+        assertThat(stored.getStorageKey()).isEqualTo("files/" + stored.getId() + "/resumen.pdf");
+        verify(storage).put(eq(stored.getStorageKey()), eq(new byte[]{4, 5}), eq("application/pdf"));
+    }
+
+    @Test
+    void temporaryUrl_onlyForFilesInObjectStorage() {
+        StoredFile inS3 = new StoredFile();
+        inS3.setStorageKey("files/abc/resumen.pdf");
+        inS3.setFileName("resumen.pdf");
+        StoredFile inDatabase = new StoredFile();
+        inDatabase.setData(new byte[]{1});
+        when(fileRepository.findById("abc")).thenReturn(Optional.of(inS3));
+        when(fileRepository.findById("db")).thenReturn(Optional.of(inDatabase));
+        when(fileRepository.findById("nope")).thenReturn(Optional.empty());
+
+        assertThat(fileStorageService.temporaryUrl("abc", false)).isEmpty();
+
+        when(objectStorage.getIfAvailable()).thenReturn(storage);
+        when(storage.temporaryUrl("files/abc/resumen.pdf", "resumen.pdf", true)).thenReturn("https://s3/firmada");
+
+        assertThat(fileStorageService.temporaryUrl("abc", true)).contains("https://s3/firmada");
+        assertThat(fileStorageService.temporaryUrl("db", true)).isEmpty();
+        assertThatThrownBy(() -> fileStorageService.temporaryUrl("nope", true)).isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void loadAndDelete_withObjectStorage_readAndRemoveTheObject() {
+        String id = "0f8c6a43-6a1e-4c55-9a6f-9a7d5a1b2c3d";
+        StoredFile stored = new StoredFile();
+        stored.setId(id);
+        stored.setStorageKey("files/" + id + "/foto.png");
+        stored.setContentType("image/png");
+        stored.setFileName("foto.png");
+        when(fileRepository.findById(id)).thenReturn(Optional.of(stored));
+        when(objectStorage.getIfAvailable()).thenReturn(storage);
+        when(storage.get("files/" + id + "/foto.png")).thenReturn(new byte[]{8});
+
+        assertThat(fileStorageService.loadByUrl("https://api/api/v1/files/" + id + "/foto.png"))
+                .hasValueSatisfying(dto -> assertThat(dto.data()).containsExactly(8));
+
+        fileStorageService.deleteByUrl("https://api/api/v1/files/" + id + "/foto.png");
+
+        verify(storage).delete("files/" + id + "/foto.png");
+        verify(fileRepository).delete(stored);
     }
 
     @Test

@@ -8,6 +8,8 @@ import com.eduquest.api.exception.ResourceNotFoundException;
 import com.eduquest.api.repository.StoredFileRepository;
 import com.eduquest.api.repository.UserRepository;
 import com.eduquest.api.service.FileStorageService;
+import com.eduquest.api.storage.ObjectStorage;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -49,10 +51,14 @@ public class FileStorageServiceImpl implements FileStorageService {
 
     private final StoredFileRepository fileRepository;
     private final UserRepository userRepository;
+    private final ObjectProvider<ObjectStorage> objectStorage;
 
-    public FileStorageServiceImpl(StoredFileRepository fileRepository, UserRepository userRepository) {
+    public FileStorageServiceImpl(StoredFileRepository fileRepository,
+                                  UserRepository userRepository,
+                                  ObjectProvider<ObjectStorage> objectStorage) {
         this.fileRepository = fileRepository;
         this.userRepository = userRepository;
+        this.objectStorage = objectStorage;
     }
 
     @Override
@@ -79,9 +85,17 @@ public class FileStorageServiceImpl implements FileStorageService {
 
         StoredFile stored = new StoredFile();
         stored.setId(UUID.randomUUID().toString());
-        stored.setData(readBytes(file));
         stored.setContentType(contentType);
         stored.setFileName(safeFileName(file.getOriginalFilename(), ALLOWED_TYPES.get(contentType)));
+        byte[] data = readBytes(file);
+        ObjectStorage storage = objectStorage.getIfAvailable();
+        if (storage != null) {
+            String key = "files/" + stored.getId() + "/" + stored.getFileName();
+            storage.put(key, data, contentType);
+            stored.setStorageKey(key);
+        } else {
+            stored.setData(data);
+        }
         stored.setSize(file.getSize());
         stored.setUploader(uploader);
         stored.setCreatedAt(LocalDateTime.now());
@@ -93,7 +107,19 @@ public class FileStorageServiceImpl implements FileStorageService {
     public StoredFileDTO load(String fileId) {
         StoredFile file = fileRepository.findById(fileId)
                 .orElseThrow(() -> new ResourceNotFoundException("Archivo no encontrado"));
-        return new StoredFileDTO(file.getData(), file.getContentType(), file.getFileName());
+        return toDto(file);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<String> temporaryUrl(String fileId, boolean download) {
+        StoredFile file = fileRepository.findById(fileId)
+                .orElseThrow(() -> new ResourceNotFoundException("Archivo no encontrado"));
+        ObjectStorage storage = objectStorage.getIfAvailable();
+        if (storage == null || file.getStorageKey() == null) {
+            return Optional.empty();
+        }
+        return Optional.of(storage.temporaryUrl(file.getStorageKey(), file.getFileName(), download));
     }
 
     @Override
@@ -106,8 +132,7 @@ public class FileStorageServiceImpl implements FileStorageService {
         if (!matcher.find()) {
             return Optional.empty();
         }
-        return fileRepository.findById(matcher.group(1))
-                .map(file -> new StoredFileDTO(file.getData(), file.getContentType(), file.getFileName()));
+        return fileRepository.findById(matcher.group(1)).map(this::toDto);
     }
 
     @Override
@@ -117,9 +142,25 @@ public class FileStorageServiceImpl implements FileStorageService {
             return;
         }
         Matcher matcher = STORED_URL.matcher(fileUrl);
-        if (matcher.find() && fileRepository.existsById(matcher.group(1))) {
-            fileRepository.deleteById(matcher.group(1));
+        if (!matcher.find()) {
+            return;
         }
+        fileRepository.findById(matcher.group(1)).ifPresent(file -> {
+            ObjectStorage storage = objectStorage.getIfAvailable();
+            if (storage != null && file.getStorageKey() != null) {
+                storage.delete(file.getStorageKey());
+            }
+            fileRepository.delete(file);
+        });
+    }
+
+    private StoredFileDTO toDto(StoredFile file) {
+        byte[] data = file.getData();
+        ObjectStorage storage = objectStorage.getIfAvailable();
+        if (data == null && storage != null && file.getStorageKey() != null) {
+            data = storage.get(file.getStorageKey());
+        }
+        return new StoredFileDTO(data, file.getContentType(), file.getFileName());
     }
 
     static String safeFileName(String original, String extension) {

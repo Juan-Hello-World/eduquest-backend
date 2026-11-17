@@ -77,12 +77,23 @@ class UserControllerTest {
 
     @Test
     void getAvatar_returnsImageWithContentType() {
-        when(userService.getAvatar(1L)).thenReturn(new AvatarImageDTO(new byte[]{9, 9}, "image/jpeg"));
+        when(userService.getAvatar(1L)).thenReturn(new AvatarImageDTO(new byte[]{9, 9}, "image/jpeg", null));
 
         ResponseEntity<byte[]> result = userController.getAvatar(1L);
 
         assertThat(result.getHeaders().getContentType()).isEqualTo(MediaType.IMAGE_JPEG);
         assertThat(result.getBody()).containsExactly(9, 9);
+    }
+
+    @Test
+    void getAvatar_storedInS3_redirects() {
+        when(userService.getAvatar(1L))
+                .thenReturn(new AvatarImageDTO(null, "image/jpeg", "https://bucket.s3.amazonaws.com/avatars/1/x"));
+
+        ResponseEntity<byte[]> result = userController.getAvatar(1L);
+
+        assertThat(result.getStatusCode()).isEqualTo(org.springframework.http.HttpStatus.FOUND);
+        assertThat(result.getHeaders().getLocation()).hasToString("https://bucket.s3.amazonaws.com/avatars/1/x");
     }
 
     @Test

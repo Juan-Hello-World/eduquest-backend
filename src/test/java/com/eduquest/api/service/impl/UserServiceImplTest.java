@@ -41,6 +41,8 @@ class UserServiceImplTest {
 
     @Mock UserRepository userRepository;
     @Mock UserAvatarRepository userAvatarRepository;
+    @Mock org.springframework.beans.factory.ObjectProvider<com.eduquest.api.storage.ObjectStorage> objectStorage;
+    @Mock com.eduquest.api.storage.ObjectStorage storage;
     @Mock JwtService jwtService;
     @Mock org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
     @Mock com.eduquest.api.service.GamificationService gamificationService;
@@ -155,12 +157,37 @@ class UserServiceImplTest {
     @Test
     void deleteAvatar_removesImageAndClearsVersion() {
         user.setAvatarVersion(123L);
-        when(userAvatarRepository.existsById(1L)).thenReturn(true);
+        UserAvatar avatar = new UserAvatar();
+        when(userAvatarRepository.findById(1L)).thenReturn(Optional.of(avatar));
 
         userService.deleteAvatar("alice");
 
-        verify(userAvatarRepository).deleteById(1L);
+        verify(userAvatarRepository).delete(avatar);
         assertThat(user.getAvatarVersion()).isNull();
+    }
+
+    @Test
+    void avatar_withObjectStorage_isUploadedReplacedAndServedByUrl() {
+        when(objectStorage.getIfAvailable()).thenReturn(storage);
+        UserAvatar avatar = new UserAvatar();
+        avatar.setStorageKey("avatars/1/anterior");
+        avatar.setContentType("image/png");
+        when(userAvatarRepository.findById(1L)).thenReturn(Optional.of(avatar));
+        MockMultipartFile file = new MockMultipartFile("file", "yo.png", "image/png", new byte[]{1, 2});
+
+        userService.updateAvatar("alice", file);
+
+        assertThat(avatar.getData()).isNull();
+        assertThat(avatar.getStorageKey()).startsWith("avatars/1/").isNotEqualTo("avatars/1/anterior");
+        verify(storage).put(org.mockito.ArgumentMatchers.startsWith("avatars/1/"),
+                org.mockito.ArgumentMatchers.eq(new byte[]{1, 2}), org.mockito.ArgumentMatchers.eq("image/png"));
+        verify(storage).delete("avatars/1/anterior");
+
+        when(storage.temporaryUrl(avatar.getStorageKey(), "avatar", false)).thenReturn("https://s3/avatar");
+        assertThat(userService.getAvatar(1L).redirectUrl()).isEqualTo("https://s3/avatar");
+
+        userService.deleteAvatar("alice");
+        verify(storage).delete(avatar.getStorageKey());
     }
 
     @Test
