@@ -63,6 +63,19 @@ class GeminiStudyPlanServiceTest {
     }
 
     @Test
+    void generateStudyPlan_whenCutByTokenLimit_dropsUnfinishedLine() {
+        Map<String, Object> textPart = Map.of("text", "Semana 1\n- Repasar límites\n**Sema");
+        Map<String, Object> candidate = Map.of("content", Map.of("parts", List.of(textPart)), "finishReason", "MAX_TOKENS");
+        Map<String, Object> body = Map.of("candidates", List.of(candidate));
+        when(restTemplate.postForEntity(anyString(), any(), any(Class.class)))
+                .thenReturn(new ResponseEntity<>((Map<String, Object>) body, (HttpHeaders) null, HttpStatus.OK));
+
+        String plan = geminiStudyPlanService.generateStudyPlan("Calculo I");
+
+        assertThat(plan).isEqualTo("Semana 1\n- Repasar límites");
+    }
+
+    @Test
     void generateStudyPlan_withEmptyCandidates_returnsFallbackPlan() {
         Map<String, Object> body = Map.of("candidates", List.of());
         when(restTemplate.postForEntity(anyString(), any(), any(Class.class)))

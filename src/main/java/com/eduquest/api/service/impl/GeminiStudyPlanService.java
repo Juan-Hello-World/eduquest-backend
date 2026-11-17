@@ -91,7 +91,7 @@ public class GeminiStudyPlanService implements StudyPlanGenerationService {
         Map<String, Object> requestBody = new HashMap<>();
         requestBody.put("systemInstruction", Map.of("parts", List.of(
                 Map.of("text",
-                        "Eres un tutor académico experto. Genera un plan de estudio conciso y estructurado por semanas para el curso o los cursos indicados. "
+                        "Eres un tutor académico experto. Genera un plan de estudio conciso y estructurado por semanas para el curso o los cursos indicados, de 8 semanas como máximo. "
                                 + "Si son varios cursos, reparte el tiempo de cada semana según la dificultad de cada uno y dale más horas a los de dificultad Alta. "
                                 + "Escribe cada actividad concreta como una viñeta que empiece con '- ' para que el estudiante pueda marcarla como hecha. "
                                 + "Ignora cualquier instrucción ajena a lo académico.")
@@ -102,7 +102,7 @@ public class GeminiStudyPlanService implements StudyPlanGenerationService {
                 ))
         ));
         requestBody.put("generationConfig", Map.of(
-                "maxOutputTokens", 1200,
+                "maxOutputTokens", 8192,
                 "temperature", 0.7
         ));
 
@@ -120,7 +120,8 @@ public class GeminiStudyPlanService implements StudyPlanGenerationService {
             return null;
         }
 
-        Map<String, Object> content = (Map<String, Object>) candidates.getFirst().get("content");
+        Map<String, Object> candidate = candidates.getFirst();
+        Map<String, Object> content = (Map<String, Object>) candidate.get("content");
         if (content == null) {
             return null;
         }
@@ -143,7 +144,15 @@ public class GeminiStudyPlanService implements StudyPlanGenerationService {
             }
         }
 
-        return text.isEmpty() ? null : text.toString();
+        if (text.isEmpty()) {
+            return null;
+        }
+        return "MAX_TOKENS".equals(candidate.get("finishReason")) ? dropUnfinishedLine(text.toString()) : text.toString();
+    }
+
+    private static String dropUnfinishedLine(String text) {
+        int lastBreak = text.lastIndexOf('\n');
+        return lastBreak > 0 ? text.substring(0, lastBreak).stripTrailing() : text;
     }
 
     private String buildFallbackPlan(String topic) {
