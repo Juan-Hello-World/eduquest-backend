@@ -17,7 +17,7 @@ PUBLIC_IP="$(aws ec2 describe-addresses --allocation-ids "$ALLOCATION_ID" --quer
 API_DOMAIN="${PUBLIC_IP//./-}.sslip.io"
 
 aws cloudformation deploy --stack-name eduquest-media --template-file "$APP_DIR/deploy/cloudformation.yml" \
-  --parameter-overrides FrontendOrigin="$FRONTEND_URL" CreateInstanceRole=false --no-fail-on-empty-changeset
+  --parameter-overrides CreateInstanceRole=false --no-fail-on-empty-changeset
 BUCKET="$(aws cloudformation describe-stacks --stack-name eduquest-media \
   --query "Stacks[0].Outputs[?OutputKey=='BucketName'].OutputValue" --output text)"
 

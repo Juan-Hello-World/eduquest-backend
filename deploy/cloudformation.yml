@@ -2,11 +2,6 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: EduQuest - bucket S3 privado para los archivos y, opcionalmente, rol de IAM para el backend en EC2.
 
 Parameters:
-  FrontendOrigin:
-    Type: String
-    Description: URL de la web en Amplify, sin barra final (ej. https://main.d1a2b3c4.amplifyapp.com).
-    AllowedPattern: ^https://[a-zA-Z0-9.-]+$
-    ConstraintDescription: Debe empezar con https:// y no terminar en /.
   CreateInstanceRole:
     Type: String
     AllowedValues: ['true', 'false']
@@ -38,7 +33,7 @@ Resources:
       CorsConfiguration:
         CorsRules:
           - AllowedMethods: [GET, HEAD]
-            AllowedOrigins: [!Ref FrontendOrigin]
+            AllowedOrigins: ['*']
             AllowedHeaders: ['*']
             ExposedHeaders: [Content-Disposition, Content-Length, Content-Range, Accept-Ranges]
             MaxAge: 3000
