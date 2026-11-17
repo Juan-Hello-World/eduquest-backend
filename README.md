@@ -248,7 +248,7 @@ Ejecutar con: `./mvnw verify`
 
 ## Variables de Entorno
 
-`DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `JWT_SECRET`, `JWT_EXPIRATION_ACCESS`, `JWT_EXPIRATION_REFRESH`, `MAIL_USER`, `MAIL_APP_PASSWORD`, `GEMINI_API_KEY`, `GEMINI_MODEL`, `ADMIN_INITIAL_PASSWORD`, `CORS_ALLOWED_ORIGINS`, `FRONTEND_URL` (dirección de la web que se usa en el enlace del correo para recuperar la contraseña; por defecto `http://localhost:5173`). Todas se cargan en `application.properties` mediante `spring.config.import=optional:file:./.env[.properties]` y, en producción, son provistas por la plataforma de despliegue.
+`DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_SSLMODE` (por defecto `prefer`; en RDS `require`), `STORAGE_PROVIDER` (`database` por defecto o `s3`), `S3_BUCKET`, `AWS_REGION`, `JWT_SECRET`, `JWT_EXPIRATION_ACCESS`, `JWT_EXPIRATION_REFRESH`, `MAIL_USER`, `MAIL_APP_PASSWORD`, `GEMINI_API_KEY`, `GEMINI_MODEL`, `ADMIN_INITIAL_PASSWORD`, `CORS_ALLOWED_ORIGINS`, `FRONTEND_URL` (dirección de la web que se usa en el enlace del correo para recuperar la contraseña; por defecto `http://localhost:5173`). Todas se cargan en `application.properties` mediante `spring.config.import=optional:file:./.env[.properties]` y, en producción, son provistas por la plataforma de despliegue.
 
 
 ## Endpoints Documentados
@@ -336,15 +336,19 @@ La API incluye **Swagger UI / OpenAPI 3.1** (springdoc-openapi v3), disponible e
 
 Para probar los endpoints protegidos, primero genera un token en `POST /api/v1/auth/login` y usa el botón **Authorize** de Swagger pegando el `accessToken` (se envía como `Authorization: Bearer <token>`). El esquema de seguridad se define en `config/OpenAPIConfig.java` y los controladores están documentados con `@Tag`/`@Operation`.
 
-## Despliegue en AWS (EC2 con HTTPS)
+## Despliegue en AWS (EC2 + RDS + S3)
 
-La carpeta `deploy/` levanta en el EC2 la base de datos, la imagen publicada en Docker Hub y [Caddy](https://caddyserver.com) como proxy con certificado HTTPS automático (Let's Encrypt), necesario para que la web en Vercel pueda llamar a la API y abrir el WebSocket (`wss://`).
+Arquitectura: el backend corre con Docker Compose en un **EC2** detrás de [Caddy](https://caddyserver.com) (HTTPS automático con Let's Encrypt y `wss://` para el WebSocket), la base de datos está en **RDS PostgreSQL**, los archivos (materiales, imágenes, videos, fotos de grupos y de perfil) se guardan en un bucket **S3** privado y la web se publica en **AWS Amplify**. La imagen del backend la construye y publica en Docker Hub el workflow `docker-publish.yml` en cada push.
 
-1. En el *Security Group* de la instancia, abre los puertos **80** y **443** (el 8080 ya no necesita estar público).
-2. Apunta un dominio a la IP elástica de la instancia. Sin dominio propio sirve uno gratuito de DuckDNS o `<ip-con-guiones>.sslip.io` (por ejemplo `3-90-12-34.sslip.io`).
-3. En el EC2: `cd deploy && cp .env.example .env`, completa los valores (`API_DOMAIN` con el dominio, `CORS_ALLOWED_ORIGINS=https://<app>.vercel.app` y `FRONTEND_URL` con la misma dirección) y ejecuta `docker compose -f docker-compose.prod.yml up -d`.
-4. En Vercel, define `VITE_API_BASE_URL=https://<API_DOMAIN>/api/v1` y vuelve a desplegar. En la app móvil, `EXPO_PUBLIC_API_URL` de `eas.json` apunta a la misma dirección.
-5. Para actualizar tras un push a `main`: `docker compose -f docker-compose.prod.yml pull backend && docker compose -f docker-compose.prod.yml up -d backend`.
+**Archivos.** Con `STORAGE_PROVIDER=s3` el backend sube cada archivo a S3 y en la base solo guarda sus datos y la clave del objeto. Las URLs que reciben la web y la app siguen siendo `https://<API_DOMAIN>/api/v1/files/{id}/{nombre}`: al pedirlas, el backend responde con una redirección a una URL firmada de S3 que dura 10 minutos, así el bucket nunca es público. En local, sin esa variable, todo sigue guardándose en PostgreSQL.
+
+1. **S3 e IAM.** En CloudFormation crea un stack con `deploy/cloudformation.yml` e indica en `FrontendOrigin` la URL de Amplify. El stack crea el bucket (privado, cifrado, solo HTTPS y con CORS de lectura para la web) y el rol `eduquest-backend-<región>` con permiso solo para subir, leer y borrar en ese bucket. Anota las salidas `BucketName` y `Region`. En AWS Academy, que no permite crear roles, usa `CreateInstanceRole=false` y en el paso 2 asigna `LabInstanceProfile`.
+2. **EC2.** Lanza una instancia Amazon Linux 2023 (t3.small recomendada) con una IP elástica y asígnale el perfil de instancia del paso 1. En *Security Group*: puertos **80** y **443** abiertos y **22** solo desde tu IP. Deja *Metadata response hop limit* en **2** para que el contenedor pueda leer las credenciales del rol.
+3. **RDS.** Crea una base PostgreSQL sin acceso público y con nombre inicial `eduquest`. Su *Security Group* debe permitir el puerto **5432** solo desde el *Security Group* del EC2. Las tablas se crean al arrancar el backend.
+4. **Dominio.** Apunta un dominio a la IP elástica del EC2 o usa `<ip-con-guiones>.sslip.io` (por ejemplo `3-85-10-20.sslip.io`), que resuelve a esa IP sin configurar nada. Amplify sirve la web por HTTPS, así que el backend también necesita HTTPS.
+5. **Arranque.** En el EC2: `git clone` del repositorio, `bash deploy/setup-ec2.sh`, vuelve a entrar por SSH y luego `cd deploy && cp .env.example .env`. Completa el `.env` (endpoint de RDS en `DB_HOST`, `S3_BUCKET`, `AWS_REGION`, `API_DOMAIN`, la URL de Amplify en `CORS_ALLOWED_ORIGINS` y `FRONTEND_URL`, y los secretos) y ejecuta `docker compose -f docker-compose.prod.yml up -d --build` (construye la imagen en el EC2; si usan la de Docker Hub, `pull` en lugar de `--build`).
+6. **CORS.** `CORS_ALLOWED_ORIGINS` se aplica a la API, al WebSocket y a las vistas previas en iframe. Debe ser la URL exacta de Amplify, sin barra final; si luego usan un dominio propio se agrega separado por comas. La app móvil no envía cabecera `Origin`, así que no necesita estar en la lista.
+7. **Actualizar** tras un push: `git pull && docker compose -f docker-compose.prod.yml up -d --build backend`.
 
 ## Evidencias del Deploy
 

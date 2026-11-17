@@ -1,0 +1,112 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: EduQuest - bucket S3 privado para los archivos y, opcionalmente, rol de IAM para el backend en EC2.
+
+Parameters:
+  FrontendOrigin:
+    Type: String
+    Description: URL de la web en Amplify, sin barra final (ej. https://main.d1a2b3c4.amplifyapp.com).
+    AllowedPattern: ^https://[a-zA-Z0-9.-]+$
+    ConstraintDescription: Debe empezar con https:// y no terminar en /.
+  CreateInstanceRole:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+    Description: false en cuentas que no permiten crear roles (AWS Academy); ahi se usa LabInstanceProfile.
+
+Conditions:
+  ShouldCreateRole: !Equals [!Ref CreateInstanceRole, 'true']
+
+Resources:
+  MediaBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub eduquest-media-${AWS::AccountId}-${AWS::Region}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      CorsConfiguration:
+        CorsRules:
+          - AllowedMethods: [GET, HEAD]
+            AllowedOrigins: [!Ref FrontendOrigin]
+            AllowedHeaders: ['*']
+            ExposedHeaders: [Content-Disposition, Content-Length, Content-Range, Accept-Ranges]
+            MaxAge: 3000
+      LifecycleConfiguration:
+        Rules:
+          - Id: limpiar-subidas-incompletas
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+
+  MediaBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref MediaBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: SoloHttps
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource:
+              - !GetAtt MediaBucket.Arn
+              - !Sub ${MediaBucket.Arn}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+
+  BackendRole:
+    Type: AWS::IAM::Role
+    Condition: ShouldCreateRole
+    Properties:
+      RoleName: !Sub eduquest-backend-${AWS::Region}
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: eduquest-media-access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:DeleteObject
+                Resource: !Sub ${MediaBucket.Arn}/*
+
+  BackendInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Condition: ShouldCreateRole
+    Properties:
+      InstanceProfileName: !Sub eduquest-backend-${AWS::Region}
+      Roles:
+        - !Ref BackendRole
+
+Outputs:
+  BucketName:
+    Description: Valor para S3_BUCKET en el .env del EC2.
+    Value: !Ref MediaBucket
+  Region:
+    Description: Valor para AWS_REGION en el .env del EC2.
+    Value: !Ref AWS::Region
+  InstanceProfile:
+    Condition: ShouldCreateRole
+    Description: Perfil de instancia que se asigna al EC2 (Acciones > Seguridad > Modificar rol de IAM).
+    Value: !Ref BackendInstanceProfile
