@@ -348,7 +348,16 @@ Arquitectura: el backend corre con Docker Compose en un **EC2** detrás de [Cadd
 4. **Dominio.** Apunta un dominio a la IP elástica del EC2 o usa `<ip-con-guiones>.sslip.io` (por ejemplo `3-85-10-20.sslip.io`), que resuelve a esa IP sin configurar nada. Amplify sirve la web por HTTPS, así que el backend también necesita HTTPS.
 5. **Arranque.** En el EC2: `git clone` del repositorio, `bash deploy/setup-ec2.sh`, vuelve a entrar por SSH y luego `cd deploy && cp .env.example .env`. Completa el `.env` (endpoint de RDS en `DB_HOST`, `S3_BUCKET`, `AWS_REGION`, `API_DOMAIN`, la URL de Amplify en `CORS_ALLOWED_ORIGINS` y `FRONTEND_URL`, y los secretos) y ejecuta `docker compose -f docker-compose.prod.yml up -d --build` (construye la imagen en el EC2; si usan la de Docker Hub, `pull` en lugar de `--build`).
 6. **CORS.** `CORS_ALLOWED_ORIGINS` se aplica a la API, al WebSocket y a las vistas previas en iframe. Debe ser la URL exacta de Amplify, sin barra final; si luego usan un dominio propio se agrega separado por comas. La app móvil no envía cabecera `Origin`, así que no necesita estar en la lista.
-En **AWS Academy (Learner Lab)** los pasos 1 a 5 los hace `deploy/aws-learner-lab.sh` desde CloudShell: sin argumentos reserva la IP elástica y muestra la URL del backend para Amplify; con la URL de Amplify crea el bucket, los *Security Groups*, la base en RDS y el EC2 con `LabInstanceProfile`, que se instala y arranca solo. Las claves de correo y de Gemini se agregan después en `/opt/eduquest/deploy/.env`.
+En **AWS Academy (Learner Lab)** los pasos 1, 3 y 5 los hace `deploy/aws-learner-lab.sh` dentro del EC2. Se reserva una IP elástica, se lanza el EC2 con `LabInstanceProfile` y en *User data* se pone:
+
+```bash
+#!/bin/bash
+dnf install -y git
+git clone https://github.com/Juan-Hello-World/eduquest-backend.git /opt/eduquest
+bash /opt/eduquest/deploy/aws-learner-lab.sh <url-de-amplify> <allocation-id> > /var/log/eduquest.log 2>&1
+```
+
+El script asocia la IP, crea el bucket, la base en RDS y su *Security Group*, genera el `.env` y levanta el backend en `https://<ip-con-guiones>.sslip.io`. Las claves de correo y de Gemini se agregan después en `/opt/eduquest/deploy/.env`.
 
 7. **Actualizar** tras un push: `git pull && docker compose -f docker-compose.prod.yml up -d --build backend`.
 
